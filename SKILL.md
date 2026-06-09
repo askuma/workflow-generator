@@ -1,6 +1,50 @@
 ---
 name: workflow-generator
-description: "Scans any project and generates WORKFLOW.html — a visual system workflow showing all components (API servers, gateways, LLM providers, vector stores, databases, queues, external sources), their communication paths, concurrency model (workers, async primitives, semaphores, rate limits), concurrent request capacity analysis, and ranked bottleneck breakdown. Works with Python, Node.js, Go, and mixed projects. Trigger: /workflow-generator"
+description: |
+  FIRE when user intent matches any of the following conditions —
+
+  EXPLICIT TRIGGERS: /workflow-generator; "generate workflow"; "create workflow diagram"; "show workflow"
+
+  ARCHITECTURAL VISUALIZATION INTENT: user wants to visualize, diagram, draw, map, or generate
+  a system architecture diagram / component diagram / service topology / service map /
+  architecture overview / system overview / data flow diagram / pipeline diagram for the
+  current project or a specified project path.
+
+  PHRASING VARIANTS THAT SHOULD ROUTE HERE: "how does this system work", "what talks to what",
+  "show me the components", "map the services", "diagram this", "visualize the stack",
+  "show request flow", "show data flow", "trace the pipeline", "architecture of this project",
+  "system map", "service dependencies", "component graph", "what calls what", "show me the
+  architecture", "draw the architecture", "explain the system design", "infrastructure diagram".
+
+  CAPACITY / CONCURRENCY ANALYSIS INTENT: user asks about concurrent request capacity,
+  max throughput, practical throughput ceiling, worker count, worker processes, async workers,
+  uvicorn/gunicorn workers, replicas, semaphore limits, rate limits, bottleneck analysis,
+  "what's the bottleneck", "how many concurrent requests can this handle", "what's the max
+  throughput", "where does this system slow down", "what limits this system".
+
+  DATA FLOW TRACING INTENT: user wants to trace write path / read path / ingestion pipeline /
+  query pipeline / embedding pipeline / retrieval pipeline through the codebase; wants to
+  understand how a request moves end-to-end from client to storage.
+
+  AI/LLM INFRASTRUCTURE ANALYSIS INTENT: user wants to audit or diagram an AI application's
+  infrastructure — LLM providers, vector stores, embedding models, eval frameworks, RAG pipeline,
+  queue workers, and how they connect.
+
+  DO NOT FIRE when: user asks about a single file, function, class, or bug; wants code review,
+  refactor, or test generation; asks about a specific library's API or error message; intent
+  is purely explanatory with no visualization, topology, or capacity-analysis component.
+
+  DISAMBIGUATE FROM generate-tech-stack: generate-tech-stack answers "what technologies are
+  used" (inventory/listing); this skill answers "how do the components connect and what is the
+  capacity" (topology + concurrency). If user wants both, run this skill first.
+
+  DETECTED SIGNALS — frameworks: FastAPI, Flask, Django, Express, NestJS, Gin, Spring;
+  gateways: nginx, Caddy, Traefik; LLM: OpenAI, Anthropic, Cohere, Bedrock;
+  vector stores: Qdrant, Pinecone, Weaviate, ChromaDB, pgvector, FAISS, Milvus;
+  databases: PostgreSQL, MySQL, MongoDB, Redis, SQLite;
+  queues: Celery, BullMQ, Kafka, RabbitMQ, RQ, SQS;
+  async primitives: asyncio.Semaphore, run_in_executor, asyncio.gather, asyncio.Lock;
+  workers: uvicorn --workers, gunicorn -w, docker-compose replicas, PM2 instances.
 ---
 
 # workflow-generator
