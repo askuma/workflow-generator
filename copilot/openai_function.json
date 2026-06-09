@@ -1,0 +1,23 @@
+{
+  "name": "generate_workflow",
+  "description": "Scan a project directory and generate WORKFLOW.html — a visual system workflow showing all components, their communication paths, concurrency model, and bottleneck analysis.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "project_dir": {
+        "type": "string",
+        "description": "Absolute path to the project root directory. Defaults to the current working directory."
+      },
+      "output_file": {
+        "type": "string",
+        "description": "Output file path for WORKFLOW.html. Defaults to <project_dir>/WORKFLOW.html."
+      },
+      "open_browser": {
+        "type": "boolean",
+        "description": "Open the file in the default browser after generation.",
+        "default": true
+      }
+    },
+    "required": []
+  }
+}
