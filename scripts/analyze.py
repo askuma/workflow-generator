@@ -131,10 +131,33 @@ _RE = {
 }
 
 
+# Directories that contain third-party or generated code, never the project's own
+# architecture. Scanning them makes every dependency's feature list look like a
+# component of the project (e.g. a local venv with langchain installed would
+# "detect" every vector store langchain supports).
+EXCLUDED_DIRS = frozenset({
+    '.git', '.hg', '.svn',
+    'node_modules', 'bower_components',
+    'site-packages', 'dist-packages',
+    'venv', '.venv', 'env', 'virtualenv',
+    '__pycache__', '.mypy_cache', '.pytest_cache', '.ruff_cache', '.tox', '.nox',
+    'dist', 'build', 'target', '.next', '.nuxt', '.output',
+    'vendor', 'third_party', '.terraform',
+    'htmlcov', 'coverage', '.cache',
+})
+
+
+def _is_excluded(root: Path, p: Path) -> bool:
+    parents = p.relative_to(root).parts[:-1]
+    return any(d in EXCLUDED_DIRS or d.endswith('.egg-info') for d in parents)
+
+
 def _read_all(root: Path, pattern: str) -> str:
-    """Read all matching files and concatenate their contents."""
+    """Read all matching files (skipping vendored/venv dirs) and concatenate their contents."""
     parts = []
     for p in root.rglob(pattern):
+        if _is_excluded(root, p):
+            continue
         try:
             parts.append(p.read_text(errors='ignore'))
         except Exception:
@@ -960,6 +983,7 @@ def render_html(analysis: dict, project_name: str) -> str:
 <p class="subtitle">Component communication map · concurrent request capacity · bottleneck analysis · {today}</p>
 
 <div class="stat-row">{stats}</div>
+<p style="font-size:11px;color:var(--muted);margin:-28px 0 40px">Capacity figures are static-analysis estimates (heuristic: ~100 concurrent tasks per async worker), not load-test results.</p>
 
 <div class="section">
 <div class="section-title">Full System Architecture — {component_count} Components</div>
@@ -1039,7 +1063,7 @@ def main():
     cap = analysis['capacity']
     print(f"Written: {output}")
     print(f"Framework: {analysis['api_server']['framework']} · Workers: {cap['total_workers']} · Concurrent I/O: ~{cap['total_io']}")
-    print(f"Bottleneck: {cap['bottleneck']} · Practical throughput: {cap['practical']}")
+    print(f"Bottleneck: {cap['bottleneck']} · Practical throughput (estimated): {cap['practical']}")
     if analysis['gateway']:
         print(f"Gateway: {analysis['gateway']['type']} · {len(analysis['gateway']['rate_limits'])} rate limit zone(s)")
     if analysis['llm']['providers']:
