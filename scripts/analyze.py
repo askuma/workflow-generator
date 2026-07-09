@@ -176,6 +176,21 @@ def _read_file(root: Path, *names: str) -> str:
     return ''
 
 
+def _read_manifests(root: Path) -> str:
+    """Dependency manifests: packages declared here are first-party signal,
+    unlike the same names appearing inside vendored dependency source."""
+    parts = []
+    for name in ('requirements.txt', 'requirements-dev.txt', 'pyproject.toml',
+                 'package.json', 'go.mod', 'Cargo.toml', 'Gemfile'):
+        p = root / name
+        if p.exists():
+            try:
+                parts.append(p.read_text(errors='ignore'))
+            except Exception:
+                pass
+    return '\n'.join(parts)
+
+
 def _first_int(m: re.Match | None) -> int | None:
     if not m:
         return None
@@ -411,7 +426,7 @@ def detect_storage(root: Path) -> list:
     env = _read_file(root, '.env', '.env.example', '.env.sample')
     py_src = _read_all(root, '*.py')
     js_src = _read_all(root, '*.js') + _read_all(root, '*.ts')
-    all_src = compose + env + py_src + js_src
+    all_src = compose + env + py_src + js_src + _read_manifests(root)
 
     stores = []
     if _RE['qdrant'].search(all_src):
@@ -446,7 +461,7 @@ def detect_storage(root: Path) -> list:
 def detect_queues(root: Path) -> list:
     all_src = _read_all(root, '*.py') + _read_all(root, '*.js') + _read_all(root, '*.ts')
     compose = _read_file(root, 'docker-compose.prod.yml', 'docker-compose.yml')
-    combined = all_src + compose
+    combined = all_src + compose + _read_manifests(root)
 
     queues = []
     if _RE['celery'].search(combined):
@@ -467,7 +482,7 @@ def detect_queues(root: Path) -> list:
 def detect_external_sources(root: Path) -> list:
     all_src = _read_all(root, '*.py') + _read_all(root, '*.js') + _read_all(root, '*.ts')
     env = _read_file(root, '.env', '.env.example', '.env.sample')
-    combined = all_src + env
+    combined = all_src + env + _read_manifests(root)
 
     sources = []
     if _RE['jira'].search(combined):
@@ -920,8 +935,8 @@ def render_html(analysis: dict, project_name: str) -> str:
     if cap.get('rate_limit_str'):
         stats += stat(cap['rate_limit_str'].split()[0], '#f97316', 'Rate Limit (Gateway)', cap['rate_limit_str'])
     stats += stat(cap['practical'], '#eab308', 'Practical Throughput', f"bottleneck: {cap['bottleneck']}")
-    if llm.get('timeout'):
-        stats += stat(f"{llm['timeout']}s", '#06b6d4', 'LLM Timeout', ', '.join(llm['providers'][:1]) or 'LLM provider')
+    if llm.get('timeout') and llm.get('providers'):
+        stats += stat(f"{llm['timeout']}s", '#06b6d4', 'LLM Timeout', ', '.join(llm['providers'][:1]))
 
     # Flow cards HTML
     flow_html = ''
