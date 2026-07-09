@@ -6,6 +6,11 @@ Works with Python, Node.js, Go, and mixed projects. No external dependencies for
 Vendored and generated directories (`node_modules`, `venv`, `site-packages`, `dist`, …) are never scanned,
 and capacity figures are clearly labeled as static-analysis estimates.
 
+**[Live demo →](https://askuma.github.io/workflow-generator/)** — generated from
+[fastapi/full-stack-fastapi-template](https://github.com/fastapi/full-stack-fastapi-template), unmodified.
+
+![WORKFLOW.html generated for full-stack-fastapi-template](docs/preview.png)
+
 ## What it produces
 
 Every generated page contains:

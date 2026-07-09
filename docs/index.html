@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>fastapi-full-stack-template — System Workflow</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0f172a;--bg2:#111827;--bg3:#161e2e;--bg4:#1a2535;
+--border:#1e293b;--border2:#263347;--text:#f1f5f9;--muted:#64748b;--dim:#334155;
+--sans:'IBM Plex Sans',system-ui,sans-serif;--mono:'JetBrains Mono',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.6}
+.page{max-width:1440px;margin:0 auto;padding:40px 32px 80px}
+h1{font-size:28px;font-weight:700;color:#f8fafc;margin-bottom:4px}
+.subtitle{color:var(--muted);font-size:14px;margin-bottom:40px}
+.section{margin-bottom:56px}
+.section-title{font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+color:var(--muted);border-bottom:1px solid var(--border);padding-bottom:10px;margin-bottom:24px}
+.stat-row{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:40px}
+.stat-card{background:var(--bg3);border:1px solid var(--border);border-radius:12px;
+padding:20px 24px;flex:1;min-width:160px}
+.stat-card .val{font-size:36px;font-weight:700;font-family:var(--mono);line-height:1}
+.stat-card .lbl{font-size:12px;color:var(--muted);margin-top:6px}
+.stat-card .sub{font-size:11px;color:var(--dim);margin-top:2px;font-family:var(--mono)}
+/* Architecture */
+.arch-wrap{background:var(--bg3);border:1px solid var(--border);border-radius:14px;
+padding:24px;overflow-x:auto}
+.arch-layer{margin-bottom:0}
+.arch-row-label{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+color:#334155;margin-bottom:8px;padding-left:4px}
+.arch-boxes{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.arch-box{border:1.5px solid;border-radius:10px;padding:12px 16px;min-width:160px;flex:1;max-width:280px}
+.arch-box .bname{font-weight:700;font-size:13px;margin-bottom:2px}
+.arch-box .bdesc{font-size:11px;opacity:.7;margin-bottom:4px}
+.arch-box .bcode{font-family:var(--mono);font-size:10px;opacity:.55;margin-top:2px}
+.arch-arrow{text-align:center;color:#2d3f55;font-size:20px;line-height:1;padding:4px 0;
+user-select:none}
+/* Flows */
+.flows{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px}
+.flow-card{background:var(--bg3);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.flow-header{padding:14px 18px;font-weight:600;font-size:13px;
+display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)}
+.flow-header .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.flow-step{display:flex;align-items:flex-start;gap:12px;padding:9px 18px;
+border-bottom:1px solid var(--border)}
+.flow-step:last-child{border-bottom:none}
+.flow-step:hover{background:var(--bg4)}
+.step-num{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;
+justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;margin-top:2px;
+font-family:var(--mono)}
+.step-title{font-weight:600;font-size:13px}
+.step-desc{font-size:12px;color:var(--muted);margin-top:1px}
+.step-code{font-family:var(--mono);font-size:11px;color:#06b6d4;
+background:rgba(6,182,212,.08);border-radius:4px;padding:2px 6px;
+margin-top:4px;display:inline-block}
+/* Table */
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;
+letter-spacing:.07em;color:var(--muted);padding:8px 14px;border-bottom:1px solid var(--border)}
+td{padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:top}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--bg4)}
+.tbl-wrap{background:var(--bg3);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.tag{display:inline-block;font-family:var(--mono);font-size:11px;padding:2px 8px;
+border-radius:4px;font-weight:600}
+/* Bottleneck */
+.bn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.bn-card{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
+.bn-title{font-weight:600;font-size:13px;margin-bottom:8px;display:flex;
+justify-content:space-between;align-items:center}
+.bn-track{background:#0a0f1a;border-radius:4px;height:8px;margin-bottom:8px;overflow:hidden}
+.bn-fill{height:100%;border-radius:4px}
+.bn-meta{font-size:12px;color:var(--muted)}
+footer{text-align:center;color:var(--dim);font-size:12px;margin-top:60px;
+padding-top:20px;border-top:1px solid var(--border)}
+code{font-family:var(--mono);font-size:11px;color:#06b6d4}
+</style>
+</head>
+<body>
+<div class="page">
+<h1>fastapi-full-stack-template — System Workflow</h1>
+<p class="subtitle">Component communication map · concurrent request capacity · bottleneck analysis · 2026-07-09</p>
+
+<div class="stat-row"><div class="stat-card"><div class="val" style="color:#22c55e">1</div><div class="lbl">API Worker Processes</div><div class="sub">1 workers × 1 replica(s)</div></div><div class="stat-card"><div class="val" style="color:#3b82f6">~100</div><div class="lbl">Max Concurrent Async I/O</div><div class="sub">~100 per asyncio worker</div></div><div class="stat-card"><div class="val" style="color:#eab308">~100 concurrent I/O</div><div class="lbl">Practical Throughput</div><div class="sub">bottleneck: I/O event loop</div></div></div>
+<p style="font-size:11px;color:var(--muted);margin:-28px 0 40px">Capacity figures are static-analysis estimates (heuristic: ~100 concurrent tasks per async worker), not load-test results.</p>
+
+<div class="section">
+<div class="section-title">Full System Architecture — 5 Components</div>
+<div class="arch-wrap"><div class="arch-layer"><div class="arch-row-label">EXTERNAL SOURCES &amp; CLIENTS</div><div class="arch-boxes"><div class="arch-box" style="background:#1a2535;border-color:#94a3b8"><div class="bname" style="color:#94a3b8">GitHub</div><div class="bdesc">Webhooks + API</div><div class="bcode">HMAC-SHA256</div></div><div class="arch-box" style="background:#0a1a0e;border-color:#22c55e"><div class="bname" style="color:#22c55e">Users / API Clients</div><div class="bdesc">HTTPS / WebSocket</div><div class="bcode">JWT</div></div></div></div>
+<div class="arch-arrow">↓</div>
+<div class="arch-layer"><div class="arch-row-label">GATEWAY / REVERSE PROXY</div><div class="arch-boxes"><div class="arch-box" style="background:#1a2535;border-color:#94a3b8"><div class="bname" style="color:#94a3b8">nginx</div><div class="bdesc">worker_connections ?</div><div class="bcode">TLS termination</div></div></div></div>
+<div class="arch-arrow">↓</div>
+<div class="arch-layer"><div class="arch-row-label">APPLICATION LAYER</div><div class="arch-boxes"><div class="arch-box" style="background:#0f1a2e;border-color:#3b82f6"><div class="bname" style="color:#3b82f6">FastAPI</div><div class="bdesc">async 1 worker × 1 replica</div><div class="bcode">jwt · oauth</div></div><div class="arch-box" style="background:#061a20;border-color:#06b6d4"><div class="bname" style="color:#06b6d4">React</div><div class="bdesc">UI framework</div></div></div></div>
+<div class="arch-arrow">↓</div>
+<div class="arch-layer"><div class="arch-row-label">PROCESSING &amp; QUEUE LAYER</div><div class="arch-boxes"><div class="arch-box" style="background:#1a1408;border-color:#eab308"><div class="bname" style="color:#eab308">Auth Middleware</div><div class="bdesc">JWT decode · RBAC scope check</div></div></div></div>
+<div class="arch-arrow">↓</div>
+<div class="arch-layer"><div class="arch-row-label">STORAGE &amp; PERSISTENCE</div><div class="arch-boxes"><div class="arch-box" style="background:#0f1a2e;border-color:#3b82f6"><div class="bname" style="color:#3b82f6">PostgreSQL</div><div class="bdesc">Primary database</div></div></div></div></div>
+<div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-top:20px"><div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Detected API Routes (10+)</div><div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">DELETE /me</div><div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">DELETE /{id}</div><div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">DELETE /{user_id}</div><div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">GET /</div><div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">GET /health-check/</div><div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">GET /me</div><div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">GET /{id}</div><div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">GET /{user_id}</div><div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">PATCH /me</div><div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">PATCH /me/password</div></div>
+</div>
+
+<div class="section">
+<div class="section-title">Data Flow Paths — Step by Step</div>
+<div class="flows"><div class="flow-card"><div class="flow-header" style="background:rgba(249,115,22,.08)"><div class="dot" style="background:#f97316"></div>Write Path — Webhook Ingestion</div><div class="flow-step"><div class="step-num" style="background:rgba(249,115,22,.15);color:#f97316">1</div><div><div class="step-title">GitHub fires webhook</div><div class="step-desc">POST to /me. Signature verified immediately.</div><div class="step-code">HMAC-SHA256</div></div></div><div class="flow-step"><div class="step-num" style="background:rgba(249,115,22,.15);color:#f97316">2</div><div><div class="step-title">Instant acknowledgment</div><div class="step-desc">API returns 202 immediately — processing continues async in event loop</div><div class="step-code">202 Accepted</div></div></div></div></div>
+</div>
+
+<div class="section">
+<div class="section-title">Concurrency Model — Layer by Layer</div>
+<div class="tbl-wrap"><table><thead><tr><th>Layer</th><th>Concurrency Model</th><th>Ceiling</th><th>Limiting Factor</th></tr></thead><tbody><tr><td><strong>Nginx / Gateway</strong></td><td>Event-driven (epoll)</td><td><span class="tag" style="background:rgba(34,197,94,.15);color:#22c55e">1024 connections</span></td><td><span style="font-size:12px;color:var(--muted)">worker_connections · no rate limit detected</span></td></tr><tr><td><strong>FastAPI / App Server</strong></td><td>asyncio event loop</td><td><span class="tag" style="background:rgba(59,130,246,.15);color:#3b82f6">~100 concurrent I/O</span></td><td><span style="font-size:12px;color:var(--muted)">1 × 1 = 1 workers</span></td></tr></tbody></table></div>
+</div>
+
+<div class="section">
+<div class="section-title">Bottleneck Analysis — Where the System Saturates First</div>
+<div class="bn-grid"><div class="bn-card"><div class="bn-title"><span>Network I/O</span><span style="color:#22c55e;font-family:var(--mono);font-size:12px">LOW</span></div><div class="bn-track"><div class="bn-fill" style="width:20%;background:#22c55e"></div></div><div class="bn-meta">Event-loop driven I/O is efficient. Scale workers horizontally to increase throughput.</div></div></div>
+</div>
+
+<footer>fastapi-full-stack-template · System Workflow · 5 components · 2026-07-09 · workflow-generator</footer>
+</div>
+</body>
+</html>

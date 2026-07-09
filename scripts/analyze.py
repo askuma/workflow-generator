@@ -935,8 +935,8 @@ def render_html(analysis: dict, project_name: str) -> str:
     if cap.get('rate_limit_str'):
         stats += stat(cap['rate_limit_str'].split()[0], '#f97316', 'Rate Limit (Gateway)', cap['rate_limit_str'])
     stats += stat(cap['practical'], '#eab308', 'Practical Throughput', f"bottleneck: {cap['bottleneck']}")
-    if llm.get('timeout'):
-        stats += stat(f"{llm['timeout']}s", '#06b6d4', 'LLM Timeout', ', '.join(llm['providers'][:1]) or 'LLM provider')
+    if llm.get('timeout') and llm.get('providers'):
+        stats += stat(f"{llm['timeout']}s", '#06b6d4', 'LLM Timeout', ', '.join(llm['providers'][:1]))
 
     # Flow cards HTML
     flow_html = ''
