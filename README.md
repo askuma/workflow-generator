@@ -1,5 +1,7 @@
 # workflow-generator
 
+<!-- mcp-name: io.github.askuma/workflow-generator -->
+
 Scan any project and generate **WORKFLOW.html** — a dark-mode visual system diagram showing every component, how they talk to each other, and where your throughput ceiling actually is.
 
 Works with Python, Node.js, Go, and mixed projects. No external dependencies for the core scanner.
@@ -9,7 +11,7 @@ and capacity figures are clearly labeled as static-analysis estimates.
 **[Live demo →](https://askuma.github.io/workflow-generator/)** — generated from
 [fastapi/full-stack-fastapi-template](https://github.com/fastapi/full-stack-fastapi-template), unmodified.
 
-![WORKFLOW.html generated for full-stack-fastapi-template](docs/preview.png)
+![WORKFLOW.html generated for full-stack-fastapi-template](https://raw.githubusercontent.com/askuma/workflow-generator/main/docs/preview.png)
 
 ## What it produces
 
@@ -41,6 +43,25 @@ Every generated page contains:
 ---
 
 ## Install
+
+### pip (CLI + MCP server)
+
+```bash
+pip install workflow-generator-mcp
+
+workflow-generator . WORKFLOW.html       # CLI: scan and write the report
+workflow-generator-mcp                    # stdio MCP server
+```
+
+With pip installed, any MCP host config reduces to:
+
+```json
+{
+  "mcpServers": {
+    "workflow-generator": { "command": "workflow-generator-mcp" }
+  }
+}
+```
 
 ### Claude Code (skill)
 
