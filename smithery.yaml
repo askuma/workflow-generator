@@ -1,0 +1,7 @@
+# Smithery configuration file: https://smithery.ai/docs/config
+build:
+  dockerBuildPath: .
+startCommand:
+  type: stdio
+  commandFunction: |-
+    (config) => ({ command: 'workflow-generator-mcp', args: [] })
