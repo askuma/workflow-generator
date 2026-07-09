@@ -93,14 +93,24 @@ The generated `WORKFLOW.html` always contains all of the following:
    - **STORAGE & PERSISTENCE** — vector DB, relational DB, NoSQL, Redis, S3
 
 3. **Data Flow Paths** — step-by-step cards per detected flow:
-   - Write Path (webhooks → sanitize → chunk → embed → index)
-   - Read Path (query → cache? → vector search → LLM → score)
-   - Queue/Background Jobs (enqueue → worker → persist)
+   - Write Path (webhook route + signature-check evidence, if any)
+   - Read Path (LLM + vector store presence)
+   - Queue/Background Jobs
    - Generic HTTP flow (if nothing else detected)
 
-4. **Concurrency Model table** — every layer with model / ceiling / limiting factor / code reference
+   These cards combine genuinely detected facts (provider names, models, timeouts,
+   specific routes, real HMAC-verification evidence) with the *typical* shape of that
+   kind of component. They are not a trace of an actual request path through the code —
+   the tool never confirms that a detected webhook source and a detected route are
+   the same request. Card titles say "(inferred, not traced)" or "(typical pattern)"
+   for exactly this reason, and individual steps say "not confirmed" wherever the
+   claim isn't backed by direct evidence.
 
-5. **Bottleneck Analysis** — ranked bar cards (CRITICAL → LOW) with mitigation notes
+4. **Concurrency Model table** — every layer with model / ceiling / limiting factor (a category label, not a file:line pointer into the user's code)
+
+5. **Bottleneck Analysis** — ranked bar cards (CRITICAL → LOW). Severities are derived
+   from the same min() comparison used for the "Practical Throughput" stat, so this
+   section and that stat can never disagree with each other.
 
 ## What the analyzer detects
 
@@ -150,15 +160,32 @@ TruLens · RAGAS · LangSmith
 ## Concurrency calculation
 
 ```
-total_workers      = (uvicorn_workers + gunicorn_workers) × replicas
-per_worker_io      = 100 if asyncio else 1
-total_io_concurrent= total_workers × per_worker_io
-practical_limit    = min(rate_limit, external_api_rpm, semaphore × total_workers)
+total_workers       = (uvicorn_workers + gunicorn_workers) × replicas
+per_worker_io       = 100 if asyncio else 1
+total_io_concurrent = total_workers × per_worker_io
+concurrency_ceiling = min(total_io_concurrent, semaphore × total_workers)   # whichever is present
 ```
 
-For LLM-backed services, the practical ceiling is almost always the LLM inference latency
-(3–30s per call) rather than the application layer. The semantic cache bypass rate (if
-detected) directly multiplies effective throughput.
+`practical_limit` is a genuine `min()` across every throughput-shaped constraint that
+was actually detected — not a priority-ordered guess that stops at the first match:
+
+```
+candidates = []
+if nginx/Caddy rate limit detected:      candidates += gateway_rate (r/m, parsed from config)
+if slowapi/express rate limit detected:  candidates += app_rate (r/m)
+if an LLM provider was detected:         candidates += concurrency_ceiling × (60 / timeout)
+practical_limit = min(candidates) if candidates else concurrency_ceiling
+```
+
+The LLM term ties the throughput estimate to this project's actually-detected worker
+count and async model — it no longer produces the same number regardless of whether
+the app runs one sync worker or sixteen async ones. Whichever candidate is tightest is
+reported as the bottleneck, and the "Bottleneck Analysis" section ranks the *same*
+candidate list, so the two sections of the page cannot disagree with each other.
+
+This is still a static-analysis heuristic, not a load test — it has no visibility into
+CPU/memory limits, downstream database latency, or GC pauses. Treat it as a fast sanity
+check on where to look first, not a capacity-planning number to put in an SLA.
 
 ## Design tokens (dark mode — same as TECH_STACK.html)
 
