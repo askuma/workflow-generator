@@ -22,7 +22,7 @@ Every generated page contains:
 | **Stat row** | Workers · Concurrent I/O ceiling · Semaphore limit · Rate limit · Practical throughput |
 | **Architecture diagram** | Layered flow: external sources → gateway → API → queues → AI → storage |
 | **Data flow cards** | Write path, read/query path, background jobs — inferred from what's detected |
-| **Concurrency table** | Every layer: model · ceiling · limiting factor · code reference |
+| **Concurrency table** | Every layer: model · ceiling · limiting factor |
 | **Bottleneck analysis** | Ranked CRITICAL → LOW with mitigation notes |
 
 ## What it detects

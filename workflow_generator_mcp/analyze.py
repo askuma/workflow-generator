@@ -82,14 +82,15 @@ _RE = {
     'rabbitmq':         re.compile(r'rabbitmq|pika|amqp://', re.I),
     'redis_queue':      re.compile(r'rq\.|from rq |RedisQueue', re.I),
     'sqs':              re.compile(r'boto3.*sqs|SQSClient|aws.*sqs', re.I),
-    # External sources
-    'jira':             re.compile(r'jira|atlassian', re.I),
-    'ado':              re.compile(r'azure.?devops|dev\.azure\.com|AzureDevOps', re.I),
-    'slack':            re.compile(r'slack', re.I),
-    'github':           re.compile(r'github|octokit|PyGithub', re.I),
-    'stripe':           re.compile(r'stripe', re.I),
-    'salesforce':       re.compile(r'salesforce|simple_salesforce', re.I),
-    'twilio':           re.compile(r'twilio', re.I),
+    # External sources — require actual SDK usage / conventional env-var names,
+    # not a bare word match (which fires on READMEs, CI badges, and comments).
+    'jira':             re.compile(r'\bimport\s+jira\b|from\s+jira\b|JIRA_(API_TOKEN|BASE_URL|EMAIL)|atlassian\.net', re.I),
+    'ado':              re.compile(r'azure.?devops|dev\.azure\.com|AzureDevOps|AZURE_DEVOPS_(PAT|TOKEN|ORG)', re.I),
+    'slack':            re.compile(r'slack_sdk|slack_bolt|from\s+slack\b|import\s+slack\b|SLACK_(BOT_TOKEN|WEBHOOK_URL|SIGNING_SECRET)|@slack/(bolt|web-api)', re.I),
+    'github':           re.compile(r'PyGithub|from\s+github\b|import\s+github\b|@octokit|X-Hub-Signature|GITHUB_(TOKEN|WEBHOOK_SECRET|APP_ID)\b', re.I),
+    'stripe':           re.compile(r'import\s+stripe\b|stripe\.(api_key|Webhook|Charge|Customer)|STRIPE_(SECRET_KEY|WEBHOOK_SECRET|API_KEY)', re.I),
+    'salesforce':       re.compile(r'simple_salesforce|from\s+salesforce\b|SALESFORCE_(USERNAME|PASSWORD|SECURITY_TOKEN)', re.I),
+    'twilio':           re.compile(r'from\s+twilio\b|import\s+twilio\b|twilio\.rest|TWILIO_(ACCOUNT_SID|AUTH_TOKEN)', re.I),
     'sendgrid':         re.compile(r'sendgrid|mailgun|SES.*email', re.I),
     's3':               re.compile(r'boto3.*s3|s3://|S3Client', re.I),
     # Auth
@@ -510,7 +511,16 @@ def detect_external_sources(root: Path) -> list:
 
 # ── Concurrency calculation ────────────────────────────────────────────────────
 
-def compute_concurrency(workers: dict, gateway: dict | None, concur: dict, llm: dict) -> dict:
+def _rate_str_to_per_min(rate_str: str) -> float | None:
+    """Parse a 'Nr/m' or 'Nr/s' style rate string into requests-per-minute."""
+    m = re.match(r'(\d+(?:\.\d+)?)r/([ms])', rate_str or '')
+    if not m:
+        return None
+    val, unit = float(m.group(1)), m.group(2)
+    return val * 60 if unit == 's' else val
+
+
+def compute_concurrency(workers: dict, gateway: dict | None, concur: dict, llm: dict, api: dict | None = None) -> dict:
     uv = workers.get('uvicorn_workers') or 1
     gu = workers.get('gunicorn_workers') or (1 if not workers.get('uvicorn_workers') else 0)
     replicas = workers.get('replicas') or 1
@@ -533,20 +543,54 @@ def compute_concurrency(workers: dict, gateway: dict | None, concur: dict, llm: 
 
     # Semaphore effective limit
     sem_limit = min(concur.get('semaphores', [999])) if concur.get('semaphores') else None
+    sem_ceiling = sem_limit * total_workers if sem_limit else None
 
-    # Practical throughput estimate
-    # If LLM: ~50-200 req/min limited by OpenAI
-    # If DB-only: much higher
+    # Concurrency ceiling = the tightest of the concurrency-shaped constraints.
+    concurrency_candidates = [('I/O event loop' if is_async else 'Sync worker pool', total_io)]
+    if sem_ceiling is not None:
+        concurrency_candidates.append(('Semaphore limit', sem_ceiling))
+    concurrency_label, concurrency_ceiling = min(concurrency_candidates, key=lambda c: c[1])
+
+    # Throughput-shaped constraints (requests/min), only added when real evidence exists.
+    # This is a genuine min() across whichever constraints were actually detected —
+    # previously this picked one branch by priority and silently ignored the others.
+    throughput_candidates = []
+
+    if gateway and gateway.get('rate_limits'):
+        rpm = _rate_str_to_per_min(gateway['rate_limits'][0]['rate'])
+        if rpm:
+            throughput_candidates.append((f"{gateway['type']} rate limit", rpm))
+
+    if api and api.get('app_rate_limits'):
+        arl = api['app_rate_limits'][0]
+        try:
+            rate_val = float(arl['rate'])
+            unit = (arl.get('unit') or '').lower()
+            rpm = rate_val * 60 if unit.startswith('sec') else rate_val
+            throughput_candidates.append(('Application rate limit', rpm))
+        except (KeyError, TypeError, ValueError):
+            pass
+
     if llm.get('providers'):
+        # Model each in-flight concurrency slot as tied up for one LLM call's timeout —
+        # tied to the actually-detected worker/async/semaphore numbers, not a bare constant.
         timeout = llm.get('timeout') or 30
-        practical = f"~{max(10, 60 // max(timeout // 10, 1))}–{max(50, 600 // max(timeout // 10, 1))}/min"
-        bottleneck = llm['providers'][0]
-    elif sem_limit:
-        practical = f"~{sem_limit * total_workers} concurrent tasks"
-        bottleneck = 'Semaphore limit'
+        llm_rpm = concurrency_ceiling * (60 / timeout)
+        throughput_candidates.append((f"{llm['providers'][0]} latency", llm_rpm))
+
+    # Rank whichever set of constraints is operative, tightest first. render_bottlenecks
+    # derives its severities from this same ranking instead of keeping its own guess —
+    # otherwise the stat row and the bottleneck cards could disagree with each other.
+    if throughput_candidates:
+        ranking = sorted(throughput_candidates, key=lambda c: c[1])
+        ranking_kind = 'rpm'
+        bottleneck, rpm = ranking[0]
+        practical = f"~{int(rpm)}/min"
     else:
-        practical = f"~{total_io} concurrent I/O"
-        bottleneck = 'I/O event loop'
+        ranking = sorted(concurrency_candidates, key=lambda c: c[1])
+        ranking_kind = 'concurrency'
+        bottleneck, concurrency_ceiling = ranking[0]
+        practical = f"~{concurrency_ceiling} concurrent I/O"
 
     # Rate limits
     rate_limit_str = None
@@ -560,6 +604,8 @@ def compute_concurrency(workers: dict, gateway: dict | None, concur: dict, llm: 
         'total_io': total_io,
         'sem_limit': sem_limit,
         'practical': practical,
+        'ranking': ranking,
+        'ranking_kind': ranking_kind,
         'bottleneck': bottleneck,
         'rate_limit_str': rate_limit_str,
         'worker_connections': gateway.get('worker_connections') if gateway else None,
@@ -579,43 +625,72 @@ def infer_flows(analysis: dict) -> list:
     concur = analysis['concurrency']
     gateway = analysis['gateway']
 
-    # Write path: webhooks / ingestion
-    webhook_sources = [s for s in ext if s.get('proto', '').lower().startswith('webhook') or 'webhook' in s.get('proto', '').lower()]
+    # Write path: webhooks / ingestion.
+    # Previously this paired *any* detected external-source name with routes[0] —
+    # literally the alphabetically-first route found anywhere in the app — and
+    # presented the pairing as a traced fact ("GitHub fires webhook -> POST to /me").
+    # The two signals are almost never actually connected. Now: only use a route if
+    # its path genuinely contains "webhook", never assert signature verification
+    # unless the HMAC/signing-secret pattern was actually detected in source, and
+    # say "possible" / "not confirmed" wherever the link between signals is inferred
+    # rather than observed.
+    webhook_sources = [s for s in ext if 'webhook' in s.get('proto', '').lower()]
+    webhook_routes = [r for r in api.get('routes', []) if 'webhook' in r.lower()]
     if api.get('has_webhooks') or webhook_sources:
         steps = []
-        if webhook_sources:
-            steps.append({'title': f"{' / '.join(s['name'] for s in webhook_sources[:2])} fires webhook",
-                          'desc': f"POST to /{analysis['api_server']['routes'][0].split()[1].strip('/').split('/')[0] if analysis['api_server']['routes'] else 'webhooks'}. Signature verified immediately.",
-                          'code': ', '.join(s['auth'] for s in webhook_sources[:2] if s.get('auth') and s['auth'] != '—')[:40] or None})
-        steps.append({'title': 'Instant acknowledgment', 'desc': 'API returns 202 immediately — processing continues async in event loop', 'code': '202 Accepted'})
+        route_ref = webhook_routes[0] if webhook_routes else None
+        hmac_detected = api.get('auth', {}).get('hmac', False)
+
+        if webhook_sources and route_ref:
+            names = ' / '.join(s['name'] for s in webhook_sources[:2])
+            title, desc = f"Possible {names} webhook", f"Inbound webhook route detected: {route_ref}."
+        elif route_ref:
+            title, desc = 'Inbound webhook route', f"Detected route: {route_ref}."
+        elif webhook_sources:
+            names = ' / '.join(s['name'] for s in webhook_sources[:2])
+            title = f"{names} referenced in code"
+            desc = "Mentioned in source/env — no dedicated webhook route confirmed; verify manually."
+        else:
+            title, desc = 'Webhook pattern detected', "A /webhook-style path was found, but no specific route could be extracted."
+
+        desc += (" Signature/HMAC verification code found in source."
+                 if hmac_detected else
+                 " No signature-verification code detected — confirm this endpoint validates its sender.")
+        steps.append({'title': title, 'desc': desc, 'code': route_ref})
+        steps.append({'title': 'Acknowledgment', 'desc': 'Check the actual handler for the response status and whether processing is deferred to a worker.', 'code': None})
         if concur.get('semaphores'):
-            steps.append({'title': 'Privacy / preprocessing', 'desc': f"CPU-bound tasks offloaded to thread pool. Max {concur['semaphores'][0]} concurrent tasks (Semaphore).", 'code': f"Semaphore({concur['semaphores'][0]})"})
+            steps.append({'title': 'CPU-bound processing exists', 'desc': f"asyncio.Semaphore({concur['semaphores'][0]}) caps concurrent CPU-bound tasks somewhere in this codebase (not necessarily on this route).", 'code': f"Semaphore({concur['semaphores'][0]})"})
         vector_stores = [s for s in storage if s['type'] == 'vector']
         if vector_stores:
-            steps.append({'title': 'Chunk → Embed → Index', 'desc': f"Text split into chunks. Embedded and upserted to {vector_stores[0]['name']}.", 'code': f"batch: {concur.get('batch_size') or 100} vectors"})
-        flows.append({'title': 'Write Path — Webhook Ingestion', 'color': 'orange', 'steps': steps})
+            steps.append({'title': 'Vector store present', 'desc': f"{vector_stores[0]['name']} is used somewhere in this codebase — common in ingestion pipelines, but not confirmed to be wired to this route.", 'code': None})
+        flows.append({'title': 'Write Path — Webhook Ingestion (inferred, not traced)', 'color': 'orange', 'steps': steps})
 
-    # Read path: RAG query
+    # Read path: RAG query. Same issue as above — an LLM provider and a vector store
+    # being detected anywhere in the repo doesn't mean a single request path chains
+    # them together. Keep genuinely detected specifics (provider, model, timeout,
+    # retries, vector store name, eval framework); label the rest as a typical
+    # pattern rather than an observed one.
     vector_stores = [s for s in storage if s['type'] == 'vector']
     if llm.get('providers') and vector_stores:
         steps = [
-            {'title': 'Query from user / dashboard', 'desc': 'Auth token validated, user scope extracted (RBAC)', 'code': None},
-            {'title': 'Semantic cache check', 'desc': f"Query embedded and compared against cache. Cache hit → return immediately (no LLM call).", 'code': 'cosine sim ≥ threshold'},
-            {'title': f"Vector search in {vector_stores[0]['name']}", 'desc': 'RBAC-filtered similarity search returns top-K relevant chunks. Sub-100ms.', 'code': 'k=8 · metadata filter'},
-            {'title': f"{', '.join(llm['providers'][:2])} inference", 'desc': f"LLM generates answer from retrieved context. {'Timeout: ' + str(llm['timeout']) + 's · ' if llm.get('timeout') else ''}Retries: {llm.get('retries') or 3}", 'code': f"{', '.join(llm['models'][:1]) or llm['providers'][0]}"},
+            {'title': 'Query received', 'desc': 'Typical pattern if this is a RAG endpoint — auth/scope handling not confirmed here.', 'code': None},
+            {'title': f"Vector search in {vector_stores[0]['name']}", 'desc': f"{vector_stores[0]['name']} is used in this codebase; not confirmed to be called from the same path as the LLM call below.", 'code': None},
+            {'title': f"{', '.join(llm['providers'][:2])} inference", 'desc': f"LLM call detected. {'Timeout: ' + str(llm['timeout']) + 's · ' if llm.get('timeout') else ''}Retries: {llm.get('retries') or 'not detected'}", 'code': f"{', '.join(llm['models'][:1]) or llm['providers'][0]}"},
         ]
         if llm.get('eval_framework'):
-            steps.append({'title': f"{llm['eval_framework']} scoring", 'desc': 'Quality scores computed per response: groundedness, relevance. Logged.', 'code': None})
-        flows.append({'title': 'Read Path — AI Query', 'color': 'green', 'steps': steps})
+            steps.append({'title': f"{llm['eval_framework']} present", 'desc': f"{llm['eval_framework']} is used somewhere in this codebase — commonly for response scoring, not confirmed to run on this path.", 'code': None})
+        flows.append({'title': 'Read Path — AI Query (typical pattern, not traced)', 'color': 'green', 'steps': steps})
 
-    # Queue / background job flow
+    # Queue / background job flow — the queue name is real; the step narrative
+    # (enqueue -> dequeue -> store) is the standard shape for this kind of
+    # component, not something traced from this codebase's actual call sites.
     if queues:
         steps = [
-            {'title': 'Task enqueued', 'desc': f"API handler publishes job to {queues[0]['name']}. Returns task ID immediately.", 'code': None},
-            {'title': 'Worker picks up task', 'desc': f"{queues[0]['name']} worker dequeues and starts processing. Worker concurrency controlled.", 'code': None},
-            {'title': 'Result stored', 'desc': 'Output written to database or returned via callback.', 'code': None},
+            {'title': 'Task enqueued (typical)', 'desc': f"{queues[0]['name']} is used in this codebase. Typically an API handler publishes a job and returns immediately — verify the actual enqueue call site.", 'code': None},
+            {'title': 'Worker picks up task (typical)', 'desc': f"A {queues[0]['name']} worker process would dequeue and process — confirm the worker entry point and concurrency setting in your own config.", 'code': None},
+            {'title': 'Result stored (typical)', 'desc': 'Commonly written to a database or returned via callback — not confirmed here.', 'code': None},
         ]
-        flows.append({'title': f"Async Background Jobs — {queues[0]['name']}", 'color': 'purple', 'steps': steps})
+        flows.append({'title': f"Async Background Jobs — {queues[0]['name']} (typical pattern, not traced)", 'color': 'purple', 'steps': steps})
 
     # Generic HTTP flow (always add if nothing else)
     if not flows:
@@ -866,11 +941,30 @@ def render_concurrency_table(analysis: dict, cap: dict) -> str:
     return f'<div class="tbl-wrap"><table><thead><tr><th>Layer</th><th>Concurrency Model</th><th>Ceiling</th><th>Limiting Factor</th></tr></thead><tbody>{rows}</tbody></table></div>'
 
 
+_SEVERITY_STEPS = [
+    ('CRITICAL', 95, '#ef4444'),
+    ('HIGH', 70, '#f97316'),
+    ('MEDIUM', 50, '#eab308'),
+    ('LOW', 25, '#22c55e'),
+]
+
+
+def _mitigation_for(label: str) -> str:
+    l = label.lower()
+    if 'latency' in l:
+        return 'Mitigate: response/semantic caching, a smaller model for simple queries, or fan-out so one slow call does not hold a whole worker slot.'
+    if 'rate limit' in l:
+        return 'Mitigate: raise the configured limit if the backend can sustain it, or add client-side backoff/queueing.'
+    if 'semaphore' in l:
+        return 'Mitigate: raise the semaphore limit if memory/CPU allows, or add more worker processes.'
+    if 'i/o event loop' in l or 'sync worker pool' in l:
+        return 'Mitigate: add more workers/replicas, or move to an async framework to raise per-worker I/O concurrency.'
+    return 'Review whether this constraint is expected at current load.'
+
+
 def render_bottlenecks(analysis: dict, cap: dict) -> str:
     items = []
-    llm = analysis['llm']
     concur = analysis['concurrency']
-    workers = analysis['workers']
 
     def card(name: str, severity: str, pct: int, color: str, detail: str) -> str:
         return (
@@ -880,29 +974,30 @@ def render_bottlenecks(analysis: dict, cap: dict) -> str:
             f'<div class="bn-meta">{detail}</div></div>'
         )
 
-    if llm.get('providers'):
-        timeout = llm.get('timeout') or 30
-        items.append(card(f"{llm['providers'][0]} (LLM)", 'CRITICAL', 95, '#ef4444',
-                          f"Primary bottleneck. Each inference call takes {timeout}s timeout. "
-                          f"Cache bypass required. Mitigate: semantic cache, smaller model for simple queries."))
-    if concur.get('semaphores'):
-        items.append(card('CPU Processing (Semaphore)', 'HIGH', 70, '#f97316',
-                          f"asyncio.Semaphore({min(concur['semaphores'])}) limits parallel CPU tasks. "
-                          f"Prevents memory spikes but caps throughput. Mitigate: increase limit or add workers."))
+    # Ranked from the same min() comparison used for the "Practical Throughput" stat —
+    # severity here is derived from that real ranking, not a fixed per-signal-type table,
+    # so this section can no longer disagree with the stat row above it.
+    ranking = cap.get('ranking') or []
+    unit = 'requests/min' if cap.get('ranking_kind') == 'rpm' else 'units of concurrent capacity'
+    for i, (label, value) in enumerate(ranking):
+        severity, pct, color = _SEVERITY_STEPS[min(i, len(_SEVERITY_STEPS) - 1)]
+        if i == 0:
+            detail = f"Tightest ceiling among detected constraints: ~{int(value)} {unit}. {_mitigation_for(label)}"
+        else:
+            detail = f"Looser than the binding constraint above (~{int(value)} {unit}) — only matters once that one is relieved."
+        items.append(card(label, severity, pct, color, detail))
 
-    if analysis['queues']:
-        items.append(card(f"{analysis['queues'][0]['name']} Workers", 'MEDIUM', 55, '#eab308',
-                          'Worker concurrency set at startup. Scale horizontally or increase Celery -c. Backpressure controls queue depth.'))
-
+    # Informational notes appended after the real ranking — these are context, not
+    # ranked constraints, since there's no reliable way to compare their cost against
+    # the ranked list above from static analysis alone.
     if concur.get('batch_size'):
-        items.append(card('Embedding API', 'MEDIUM', 45, '#eab308',
-                          f"Batch size {concur['batch_size']} texts/call. Increase to reduce round-trips. "
-                          f"Rate-limited by embedding API tier."))
+        items.append(card('Embedding batch size', 'LOW', 20, '#22c55e',
+                          f"Batch size {concur['batch_size']} texts/call — detected in source, not assumed."))
 
     vector_stores = [s for s in analysis['storage'] if s['type'] == 'vector']
     if vector_stores:
-        items.append(card(f"{vector_stores[0]['name']} Vector Search", 'LOW', 15, '#22c55e',
-                          'HNSW search is sub-100ms at scale. Quantization reduces RAM 4×. Not a bottleneck at typical workloads.'))
+        items.append(card(f"{vector_stores[0]['name']} (vector store)", 'LOW', 15, '#22c55e',
+                          'Present in this codebase. Typically sub-100ms at moderate scale, but not measured here.'))
 
     if not items:
         items.append(card('Network I/O', 'LOW', 20, '#22c55e',
@@ -1039,7 +1134,7 @@ def collect(root: Path) -> dict:
     storage = detect_storage(root)
     queues = detect_queues(root)
     external_sources = detect_external_sources(root)
-    capacity = compute_concurrency(workers, gateway, concur, llm)
+    capacity = compute_concurrency(workers, gateway, concur, llm, api_server)
     flows = infer_flows({
         'external_sources': external_sources,
         'gateway': gateway,
