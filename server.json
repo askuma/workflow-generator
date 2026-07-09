@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.askuma/workflow-generator",
+  "title": "Workflow Generator",
+  "description": "Generate a visual system architecture diagram (WORKFLOW.html) with concurrency capacity estimates and bottleneck analysis from any codebase.",
+  "repository": {
+    "url": "https://github.com/askuma/workflow-generator",
+    "source": "github"
+  },
+  "version": "0.2.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "workflow-generator-mcp",
+      "version": "0.2.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
