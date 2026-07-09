@@ -203,14 +203,13 @@ analysis manually using your Read and Bash tools, then write `WORKFLOW.html` dir
 Then write `WORKFLOW.html` using the exact design tokens above and the section structure:
 stat-row → architecture diagram → flow cards → concurrency table → bottleneck bars → footer.
 
-Use the `WORKFLOW.html` file in the current project as a reference for the exact visual quality
-expected — the script output should match that standard for any project.
-
 ## Notes
 
 - Always overwrite an existing `WORKFLOW.html` — never ask for confirmation
 - Works on Python, Node.js, Go, Rust, Java, Ruby projects
 - Architecture diagram adapts to what is detected: layers with no components are omitted
 - Stat cards show only metrics that could be computed (skip if data unavailable)
-- The reference `WORKFLOW.html` (cross-project-risk-agent) is at:
-  `/home/ashu/cross-project-risk-agent/WORKFLOW.html`
+- Never scan vendored or generated directories (`node_modules`, `venv`, `.venv`,
+  `site-packages`, `dist`, `build`, `.git`, …) — only the project's own source
+- Capacity figures are static-analysis heuristics (e.g. ~100 concurrent tasks per
+  async worker), not load-test results — present them as estimates

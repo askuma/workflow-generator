@@ -3,8 +3,8 @@
 Scan any project and generate **WORKFLOW.html** — a dark-mode visual system diagram showing every component, how they talk to each other, and where your throughput ceiling actually is.
 
 Works with Python, Node.js, Go, and mixed projects. No external dependencies for the core scanner.
-
-![WORKFLOW.html screenshot](https://raw.githubusercontent.com/askuma/workflow-generator/main/docs/preview.png)
+Vendored and generated directories (`node_modules`, `venv`, `site-packages`, `dist`, …) are never scanned,
+and capacity figures are clearly labeled as static-analysis estimates.
 
 ## What it produces
 

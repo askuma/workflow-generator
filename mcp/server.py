@@ -142,7 +142,7 @@ async def handle_call_tool(name: str, arguments: dict) -> list[types.TextContent
             f"Workflow generated: {output_file}",
             f"Framework: {analysis['api_server']['framework']}",
             f"Workers: {cap['total_workers']} · Concurrent I/O: ~{cap['total_io']}",
-            f"Practical throughput: {cap['practical']}",
+            f"Practical throughput (estimated): {cap['practical']}",
             f"Bottleneck: {cap['bottleneck']}",
         ]
         if analysis["gateway"]:
