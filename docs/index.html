@@ -79,15 +79,25 @@ code{font-family:var(--mono);font-size:11px;color:#06b6d4}
 </head>
 <body>
 <div class="page">
+<div style="margin-bottom:32px;padding:20px;background:var(--bg3);border:1px solid var(--border);border-radius:14px">
+  <p style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:12px">
+    How this page was generated — pip install to output, unscripted
+  </p>
+  <img src="demo.gif" alt="Running workflow-generator against fastapi/full-stack-fastapi-template, from pip install to this exact page" style="max-width:100%;border-radius:10px;display:block">
+  <p style="font-size:12px;color:var(--muted);margin-top:12px">
+    This is the live output shown in the recording above — nothing below this box has been edited.
+    <a href="https://github.com/askuma/workflow-generator" style="color:#818cf8">Source & install →</a>
+  </p>
+</div>
 <h1>fastapi-full-stack-template — System Workflow</h1>
-<p class="subtitle">Component communication map · concurrent request capacity · bottleneck analysis · 2026-07-09</p>
+<p class="subtitle">Component communication map · concurrent request capacity · bottleneck analysis · 2026-07-10</p>
 
 <div class="stat-row"><div class="stat-card"><div class="val" style="color:#22c55e">1</div><div class="lbl">API Worker Processes</div><div class="sub">1 workers × 1 replica(s)</div></div><div class="stat-card"><div class="val" style="color:#3b82f6">~100</div><div class="lbl">Max Concurrent Async I/O</div><div class="sub">~100 per asyncio worker</div></div><div class="stat-card"><div class="val" style="color:#eab308">~100 concurrent I/O</div><div class="lbl">Practical Throughput</div><div class="sub">bottleneck: I/O event loop</div></div></div>
 <p style="font-size:11px;color:var(--muted);margin:-28px 0 40px">Capacity figures are static-analysis estimates (heuristic: ~100 concurrent tasks per async worker), not load-test results.</p>
 
 <div class="section">
-<div class="section-title">Full System Architecture — 5 Components</div>
-<div class="arch-wrap"><div class="arch-layer"><div class="arch-row-label">EXTERNAL SOURCES &amp; CLIENTS</div><div class="arch-boxes"><div class="arch-box" style="background:#1a2535;border-color:#94a3b8"><div class="bname" style="color:#94a3b8">GitHub</div><div class="bdesc">Webhooks + API</div><div class="bcode">HMAC-SHA256</div></div><div class="arch-box" style="background:#0a1a0e;border-color:#22c55e"><div class="bname" style="color:#22c55e">Users / API Clients</div><div class="bdesc">HTTPS / WebSocket</div><div class="bcode">JWT</div></div></div></div>
+<div class="section-title">Full System Architecture — 4 Components</div>
+<div class="arch-wrap"><div class="arch-layer"><div class="arch-row-label">EXTERNAL SOURCES &amp; CLIENTS</div><div class="arch-boxes"><div class="arch-box" style="background:#0a1a0e;border-color:#22c55e"><div class="bname" style="color:#22c55e">Users / API Clients</div><div class="bdesc">HTTPS / WebSocket</div><div class="bcode">JWT</div></div></div></div>
 <div class="arch-arrow">↓</div>
 <div class="arch-layer"><div class="arch-row-label">GATEWAY / REVERSE PROXY</div><div class="arch-boxes"><div class="arch-box" style="background:#1a2535;border-color:#94a3b8"><div class="bname" style="color:#94a3b8">nginx</div><div class="bdesc">worker_connections ?</div><div class="bcode">TLS termination</div></div></div></div>
 <div class="arch-arrow">↓</div>
@@ -101,7 +111,7 @@ code{font-family:var(--mono);font-size:11px;color:#06b6d4}
 
 <div class="section">
 <div class="section-title">Data Flow Paths — Step by Step</div>
-<div class="flows"><div class="flow-card"><div class="flow-header" style="background:rgba(249,115,22,.08)"><div class="dot" style="background:#f97316"></div>Write Path — Webhook Ingestion</div><div class="flow-step"><div class="step-num" style="background:rgba(249,115,22,.15);color:#f97316">1</div><div><div class="step-title">GitHub fires webhook</div><div class="step-desc">POST to /me. Signature verified immediately.</div><div class="step-code">HMAC-SHA256</div></div></div><div class="flow-step"><div class="step-num" style="background:rgba(249,115,22,.15);color:#f97316">2</div><div><div class="step-title">Instant acknowledgment</div><div class="step-desc">API returns 202 immediately — processing continues async in event loop</div><div class="step-code">202 Accepted</div></div></div></div></div>
+<div class="flows"><div class="flow-card"><div class="flow-header" style="background:rgba(59,130,246,.08)"><div class="dot" style="background:#3b82f6"></div>HTTP Request Flow</div><div class="flow-step"><div class="step-num" style="background:rgba(59,130,246,.15);color:#3b82f6">1</div><div><div class="step-title">Client sends request</div><div class="step-desc">HTTPS request to nginx</div></div></div><div class="flow-step"><div class="step-num" style="background:rgba(59,130,246,.15);color:#3b82f6">2</div><div><div class="step-title">Auth & validation</div><div class="step-desc">JWT decode, request validated</div></div></div><div class="flow-step"><div class="step-num" style="background:rgba(59,130,246,.15);color:#3b82f6">3</div><div><div class="step-title">Handler executes</div><div class="step-desc">FastAPI route handler processes request, queries DB</div></div></div><div class="flow-step"><div class="step-num" style="background:rgba(59,130,246,.15);color:#3b82f6">4</div><div><div class="step-title">Response returned</div><div class="step-desc">JSON response sent back to client</div></div></div></div></div>
 </div>
 
 <div class="section">
@@ -111,10 +121,10 @@ code{font-family:var(--mono);font-size:11px;color:#06b6d4}
 
 <div class="section">
 <div class="section-title">Bottleneck Analysis — Where the System Saturates First</div>
-<div class="bn-grid"><div class="bn-card"><div class="bn-title"><span>Network I/O</span><span style="color:#22c55e;font-family:var(--mono);font-size:12px">LOW</span></div><div class="bn-track"><div class="bn-fill" style="width:20%;background:#22c55e"></div></div><div class="bn-meta">Event-loop driven I/O is efficient. Scale workers horizontally to increase throughput.</div></div></div>
+<div class="bn-grid"><div class="bn-card"><div class="bn-title"><span>I/O event loop</span><span style="color:#ef4444;font-family:var(--mono);font-size:12px">CRITICAL</span></div><div class="bn-track"><div class="bn-fill" style="width:95%;background:#ef4444"></div></div><div class="bn-meta">Tightest ceiling among detected constraints: ~100 units of concurrent capacity. Mitigate: add more workers/replicas, or move to an async framework to raise per-worker I/O concurrency.</div></div></div>
 </div>
 
-<footer>fastapi-full-stack-template · System Workflow · 5 components · 2026-07-09 · workflow-generator</footer>
+<footer>fastapi-full-stack-template · System Workflow · 4 components · 2026-07-10 · workflow-generator</footer>
 </div>
 </body>
 </html>
