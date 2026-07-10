@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "workflow-generator-mcp"
-version = "0.2.0"
+version = "0.2.1"
 description = "Generate a visual system architecture diagram (WORKFLOW.html) with concurrency capacity estimates and bottleneck analysis from any codebase — CLI + MCP server, stdlib-only scanner."
 readme = "README.md"
 license = { text = "MIT" }
