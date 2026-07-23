@@ -14,7 +14,8 @@ description: |
   "show me the components", "map the services", "diagram this", "visualize the stack",
   "show request flow", "show data flow", "trace the pipeline", "architecture of this project",
   "system map", "service dependencies", "component graph", "what calls what", "show me the
-  architecture", "draw the architecture", "explain the system design", "infrastructure diagram".
+  architecture", "draw the architecture", "explain the system design", "infrastructure diagram",
+  "dependency graph", "call graph", "module graph", "what imports what", "import graph".
 
   CAPACITY / CONCURRENCY ANALYSIS INTENT: user asks about concurrent request capacity,
   max throughput, practical throughput ceiling, worker count, worker processes, async workers,
@@ -59,6 +60,12 @@ Scan the current project and produce a complete visual system workflow with conc
    ```bash
    python3 ~/.claude/skills/workflow-generator/scripts/analyze.py <project_root> <project_root>/WORKFLOW.html
    ```
+
+   Optional flags, appended after the two positional args:
+   - `--access-log <path>` — overlay real request counts (from a combined/common log file) onto
+     the codebase dependency graph's HTTP-entry edges, instead of import-direction only.
+   - `--graph-detail auto|files|dirs` — force file-level or directory-level graph nodes. Default
+     `auto` aggregates to directories once a project exceeds ~350 source files.
 
 3. **Open the output**:
    ```bash
@@ -111,6 +118,15 @@ The generated `WORKFLOW.html` always contains all of the following:
 5. **Bottleneck Analysis** — ranked bar cards (CRITICAL → LOW). Severities are derived
    from the same min() comparison used for the "Practical Throughput" stat, so this
    section and that stat can never disagree with each other.
+
+6. **Codebase Dependency Graph** — a force-directed graph of every source file (Python, JS/TS,
+   Go, Java, Rust, Ruby) as a node and every real, parser-resolved import as an edge; files that
+   match an already-detected component (an LLM call, a database client, a queue) also get an edge
+   to that component. Click a node to isolate its neighbors; hover for file details. Large
+   projects (350+ files) are aggregated to directory-level nodes automatically. Edges are
+   import-direction only (static, honest) unless `--access-log` was supplied, in which case
+   HTTP-entry edges are weighted with real observed request counts — the graph is explicit about
+   which kind of edge is which so it's never mistaken for a traced request path.
 
 ## What the analyzer detects
 

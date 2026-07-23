@@ -6,17 +6,19 @@ The skill lives at: `~/.claude/skills/workflow-generator/`
 
 ```
 ~/.claude/skills/workflow-generator/
-├── SKILL.md                  ← Claude Code skill definition
-├── INSTALL.md                ← this file
+├── SKILL.md                        ← Claude Code skill definition
+├── INSTALL.md                      ← this file
+├── workflow_generator_mcp/
+│   └── analyze.py                  ← core scanner + HTML renderer (no external deps)
 ├── scripts/
-│   └── analyze.py            ← core scanner + HTML renderer (no external deps)
+│   └── analyze.py                  ← thin compatibility shim -> workflow_generator_mcp/analyze.py
 ├── mcp/
-│   ├── server.py             ← MCP stdio server
-│   └── requirements.txt      ← pip install mcp
+│   ├── server.py                   ← MCP stdio server
+│   └── requirements.txt            ← pip install mcp
 └── copilot/
-    ├── index.js              ← GitHub Copilot Extension (Express)
+    ├── index.js                    ← GitHub Copilot Extension (Express)
     ├── package.json
-    └── openai_function.json  ← OpenAI / Antigravity function schema
+    └── openai_function.json        ← OpenAI / Antigravity function schema
 ```
 
 ---
@@ -172,6 +174,13 @@ python3 ~/.claude/skills/workflow-generator/scripts/analyze.py . ~/WORKFLOW.html
 # open ~/WORKFLOW.html in browser
 ```
 
+Optional flags (append after the two positional args):
+
+```bash
+--access-log /path/to/access.log   # overlay real request counts onto the dependency graph
+--graph-detail auto|files|dirs     # force file-level or directory-level graph nodes (default: auto)
+```
+
 Expected output:
 ```
 Written: /home/you/WORKFLOW.html
@@ -194,6 +203,7 @@ External sources: Jira, Azure DevOps, Slack, Users / API Clients
 | **Gateway** | `nginx.conf`, `Caddyfile`, `traefik.yml`, nginx image in docker-compose |
 | **Rate limits** | `limit_req_zone` (nginx), `@limiter.limit` (slowapi), `express-rate-limit` |
 | **API framework** | FastAPI, Flask, Django, Express, Gin (Go), Spring Boot |
+| **Languages** | Python, JS/TS, Go, Java, Rust, Ruby (dependency graph resolves real imports in all six) |
 | **Frontend** | Streamlit, Gradio, React, Next.js, Vue, Svelte |
 | **LLM** | OpenAI (ChatOpenAI), Anthropic (Claude), Cohere, AWS Bedrock |
 | **Embedding** | `text-embedding-3`, `CohereEmbeddings`, `HuggingFaceEmbeddings` |
@@ -212,3 +222,6 @@ Every generated `WORKFLOW.html` includes:
 3. **Flow cards** — write path, read path, queue jobs (inferred from what's detected)
 4. **Concurrency table** — every layer: model / ceiling / limiting factor
 5. **Bottleneck analysis** — ranked bars CRITICAL → LOW with mitigation notes
+6. **Codebase dependency graph** — force-directed module/import graph across all detected
+   languages; click a node to isolate its neighbors. Import-direction edges by default; pass
+   `--access-log` to weight HTTP-entry edges with real observed request counts instead
