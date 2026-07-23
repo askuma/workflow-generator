@@ -8,7 +8,7 @@ Usage:
     python3 analyze.py [project_dir] [output_file]
 """
 
-import datetime, json, re, sys
+import ast, datetime, json, re, sys
 from pathlib import Path
 
 # ── Design tokens (identical to generated WORKFLOW.html) ─────────────────────
@@ -49,10 +49,15 @@ _RE = {
     # Rate limiting — Express
     'express_rl':       re.compile(r'max\s*:\s*(\d+)'),
     # LLM
-    'openai_chat':      re.compile(r'ChatOpenAI|openai\.OpenAI|AzureChatOpenAI', re.I),
-    'anthropic_chat':   re.compile(r'ChatAnthropic|anthropic\.Anthropic', re.I),
+    'openai_chat':      re.compile(r'ChatOpenAI|openai\.OpenAI|AzureChatOpenAI|AzureOpenAI\(|\bimport\s+openai\b|from\s+openai\s+import', re.I),
+    'anthropic_chat':   re.compile(r'ChatAnthropic|anthropic\.Anthropic|\bimport\s+anthropic\b|from\s+anthropic\s+import', re.I),
     'cohere_chat':      re.compile(r'ChatCohere|cohere\.Client', re.I),
     'bedrock_chat':     re.compile(r'ChatBedrock|boto3.*bedrock', re.I),
+    'gemini_chat':      re.compile(r'ChatGoogleGenerativeAI|google\.generativeai|genai\.GenerativeModel', re.I),
+    'mistral_chat':     re.compile(r'ChatMistralAI|MistralClient|mistralai\.', re.I),
+    'groq_chat':        re.compile(r'ChatGroq|groq\.Groq|from\s+groq\s+import', re.I),
+    'ollama_chat':      re.compile(r'ChatOllama|ollama\.Client|\bimport\s+ollama\b', re.I),
+    'litellm_call':     re.compile(r'\blitellm\.(?:completion|acompletion)\b|\bimport\s+litellm\b', re.I),
     'llm_timeout':      re.compile(r'request_timeout\s*=\s*(\d+)|timeout\s*=\s*(\d+)'),
     'llm_retries':      re.compile(r'max_retries\s*=\s*(\d+)'),
     'model_name':       re.compile(r'["\']?(gpt-4o?(?:-mini|-turbo)?|gpt-3\.5[^"\']+|claude-[^"\']+|mistral[^"\']+|llama[^"\']+|command[^"\']+)["\']?', re.I),
@@ -99,8 +104,8 @@ _RE = {
     'hmac_sig':         re.compile(r'HMAC|hmac\.new|X-Hub-Signature|signing.?secret', re.I),
     'api_key_auth':     re.compile(r'api.key|APIKey|api_key.*header', re.I),
     # API routes — Python
-    'fastapi_route':    re.compile(r'@(?:app|router)\.(get|post|put|delete|patch|websocket)\s*\(\s*["\']([^"\']+)["\']'),
-    'flask_route':      re.compile(r'@app\.route\s*\(\s*["\']([^"\']+)["\']'),
+    'fastapi_route':    re.compile(r'@[\w.]+\.(get|post|put|delete|patch|websocket)\s*\(\s*["\']([^"\']+)["\']'),
+    'flask_route':      re.compile(r'@[\w.]+\.route\s*\(\s*["\']([^"\']+)["\']'),
     'django_path':      re.compile(r"(?:path|re_path|url)\s*\(\s*['\"]([^'\"]+)['\"]"),
     # API routes — Node.js
     'express_route':    re.compile(r'(?:app|router)\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']'),
@@ -153,8 +158,21 @@ def _is_excluded(root: Path, p: Path) -> bool:
     return any(d in EXCLUDED_DIRS or d.endswith('.egg-info') for d in parents)
 
 
+_read_all_cache: dict[tuple[str, str], str] = {}
+
+
 def _read_all(root: Path, pattern: str) -> str:
-    """Read all matching files (skipping vendored/venv dirs) and concatenate their contents."""
+    """Read all matching files (skipping vendored/venv dirs) and concatenate their contents.
+
+    Memoized per (root, pattern): every detector in collect() independently
+    asks for the same '*.py'/'*.js' full-tree read, so on a large repo this
+    was re-walking and re-reading the whole tree ~8 times over. One process
+    only ever analyzes one root, so a plain dict cache (no eviction) is safe.
+    """
+    key = (str(root.resolve()), pattern)
+    cached = _read_all_cache.get(key)
+    if cached is not None:
+        return cached
     parts = []
     for p in root.rglob(pattern):
         if _is_excluded(root, p):
@@ -163,7 +181,9 @@ def _read_all(root: Path, pattern: str) -> str:
             parts.append(p.read_text(errors='ignore'))
         except Exception:
             pass
-    return '\n'.join(parts)
+    result = '\n'.join(parts)
+    _read_all_cache[key] = result
+    return result
 
 
 def _read_file(root: Path, *names: str) -> str:
@@ -177,9 +197,17 @@ def _read_file(root: Path, *names: str) -> str:
     return ''
 
 
+_read_manifests_cache: dict[str, str] = {}
+
+
 def _read_manifests(root: Path) -> str:
     """Dependency manifests: packages declared here are first-party signal,
-    unlike the same names appearing inside vendored dependency source."""
+    unlike the same names appearing inside vendored dependency source.
+    Memoized — detect_llm() alone calls this once per provider spec."""
+    key = str(root.resolve())
+    cached = _read_manifests_cache.get(key)
+    if cached is not None:
+        return cached
     parts = []
     for name in ('requirements.txt', 'requirements-dev.txt', 'pyproject.toml',
                  'package.json', 'go.mod', 'Cargo.toml', 'Gemfile'):
@@ -189,7 +217,57 @@ def _read_manifests(root: Path) -> str:
                 parts.append(p.read_text(errors='ignore'))
             except Exception:
                 pass
-    return '\n'.join(parts)
+    result = '\n'.join(parts)
+    _read_manifests_cache[key] = result
+    return result
+
+
+def _manifest_pkg(root: Path, *pkg_names: str) -> bool:
+    """Whole-token package-name match against dependency manifests only
+    (requirements.txt/pyproject.toml/package.json/go.mod/...). A declared
+    dependency is real signal even when actual usage is hidden behind a
+    custom abstraction the source regexes don't recognize."""
+    text = _read_manifests(root)
+    return any(re.search(r'[\'"/]?' + re.escape(name) + r'[\'"@=<>~^ ,\]]', text, re.I)
+               for name in pkg_names)
+
+
+# Cheap `in` substring pre-check before the real (often alternation-heavy)
+# regex .search() — on a large repo, `all_src` can be tens of MB, and a
+# detector doing 8-10 sequential .search() calls against it dominates
+# runtime (profiled: ~70s of a 120s Dify run was regex .search()). A plain
+# substring test is far cheaper per byte than backtracking regex search, and
+# is a strictly *necessary* condition for each pattern below to ever match —
+# every alternative in the corresponding _RE pattern contains at least one of
+# these literals, so this can only skip searches that were guaranteed to
+# fail; it can never suppress a real match. Keys without a safe single/few
+# literal (rare) are simply absent here and always fall through to the real
+# regex.
+_LOWER_HINTS: dict[str, tuple[str, ...]] = {
+    'openai_chat': ('openai',), 'anthropic_chat': ('anthropic',), 'cohere_chat': ('cohere',),
+    'bedrock_chat': ('bedrock',), 'gemini_chat': ('generativeai', 'genai'),
+    'mistral_chat': ('mistral',), 'groq_chat': ('groq',), 'ollama_chat': ('ollama',),
+    'litellm_call': ('litellm',),
+    'redis_cache': ('redis',), 'redis_db': ('redis',),
+    'qdrant': ('qdrant',), 'pinecone': ('pinecone',), 'weaviate': ('weaviate',),
+    'chromadb': ('chroma',), 'pgvector': ('pgvector', 'postgres'),
+    'faiss': ('faiss',), 'milvus': ('milvus',), 'postgres': ('postgres', 'psycopg'), 'mysql': ('mysql',),
+    'mongo': ('mongo', 'motor'), 'sqlite': ('sqlite',),
+    'celery': ('celery',), 'bull': ('bull',), 'kafka': ('kafka',),
+    'rabbitmq': ('rabbitmq', 'pika', 'amqp'), 'redis_queue': ('rq', 'redisqueue'), 'sqs': ('sqs',),
+    'jira': ('jira', 'atlassian'), 'ado': ('devops', 'azure.com'), 'slack': ('slack',),
+    'github': ('github', 'octokit', 'x-hub-signature'), 'stripe': ('stripe',),
+    'salesforce': ('salesforce',), 'twilio': ('twilio',), 's3': ('s3',),
+}
+
+
+def _hinted_search(re_key: str, text: str, text_lower: str) -> re.Match | None:
+    """`_RE[re_key].search(text)`, skipping the real regex when a required
+    literal (see _LOWER_HINTS) is provably absent from text_lower."""
+    hints = _LOWER_HINTS.get(re_key)
+    if hints is not None and not any(h in text_lower for h in hints):
+        return None
+    return _RE[re_key].search(text)
 
 
 def _first_int(m: re.Match | None) -> int | None:
@@ -305,6 +383,9 @@ def detect_api_server(root: Path) -> dict:
         routes.add(f"* {m.group(1)}")
     for m in _RE['express_route'].finditer(js_src):
         routes.add(f"{m.group(1).upper()} {m.group(2)}")
+    if framework == 'Django':
+        for m in _RE['django_path'].finditer(py_src):
+            routes.add(f"* {m.group(1)}")
 
     has_webhooks = any('/webhook' in r.lower() for r in routes) or bool(_RE['webhook_path'].search(py_src + js_src))
 
@@ -330,6 +411,137 @@ def detect_api_server(root: Path) -> dict:
         'has_prometheus': has_prometheus,
         'app_rate_limits': app_rate_limits,
     }
+
+
+def _extract_route_strings(text: str, framework: str) -> set[str]:
+    """Same route-string construction detect_api_server() uses (routes.append
+    lines above), applied to one file's text instead of the whole-repo
+    concatenation — lets the graph/access-log overlay know *which* file
+    declares a given route, without inventing a second detection method."""
+    routes = set()
+    for m in _RE['fastapi_route'].finditer(text):
+        routes.add(f"{m.group(1).upper()} {m.group(2)}")
+    for m in _RE['flask_route'].finditer(text):
+        routes.add(f"* {m.group(1)}")
+    for m in _RE['express_route'].finditer(text):
+        routes.add(f"{m.group(1).upper()} {m.group(2)}")
+    if framework == 'Django':
+        for m in _RE['django_path'].finditer(text):
+            routes.add(f"* {m.group(1)}")
+    return routes
+
+
+def _route_to_regex(path: str) -> re.Pattern:
+    """Convert a detected route template (Flask/Django `<id>`, FastAPI `{id}`,
+    Express `:id`) into a regex matching one concrete request path."""
+    placeholder = re.compile(r'<[^>]+>|\{[^}]+\}|:[A-Za-z_][A-Za-z0-9_]*')
+    literal_parts = [re.escape(part) for part in placeholder.split(path)]
+    body = '[^/]+'.join(literal_parts).rstrip('/')
+    return re.compile(r'^' + body + r'/?$')
+
+
+_LOG_LINE_RE = re.compile(r'"(?P<method>[A-Z]+)\s+(?P<path>[^\s"]+)\s+HTTP/[\d.]+"\s+(?P<status>\d{3})')
+_LOG_TS_RE = re.compile(r'\[(?P<ts>[^\]]+)\]')
+
+
+def parse_access_log(path_str: str, routes: list) -> dict | None:
+    """Parse an nginx/Apache Common/Combined Log Format or uvicorn/gunicorn
+    access log into real per-route request counts. Returns None (with a
+    stderr warning) if the file is missing/unreadable/empty of matching
+    lines — absent log data must never fall back to a guessed number."""
+    p = Path(path_str)
+    if not p.exists():
+        print(f"Warning: --access-log file not found: {path_str}", file=sys.stderr)
+        return None
+
+    route_specs = []
+    for r in routes:
+        method, _, tmpl = r.partition(' ')
+        route_specs.append((method, tmpl, _route_to_regex(tmpl)))
+
+    by_route: dict[str, int] = {}
+    other = 0
+    total = 0
+    timestamps = []
+    try:
+        with p.open(errors='ignore') as f:
+            for line in f:
+                m = _LOG_LINE_RE.search(line)
+                if not m:
+                    continue
+                total += 1
+                method, raw_path = m.group('method'), m.group('path')
+                path_only = raw_path.split('?', 1)[0]
+                tm = _LOG_TS_RE.search(line)
+                if tm:
+                    try:
+                        timestamps.append(datetime.datetime.strptime(tm.group('ts').split(' ')[0], '%d/%b/%Y:%H:%M:%S'))
+                    except ValueError:
+                        pass
+                matched = None
+                for rmethod, tmpl, rx in route_specs:
+                    if rmethod not in ('*', method):
+                        continue
+                    if rx.match(path_only):
+                        matched = f"{rmethod} {tmpl}"
+                        break
+                if matched:
+                    by_route[matched] = by_route.get(matched, 0) + 1
+                else:
+                    other += 1
+    except OSError as e:
+        print(f"Warning: could not read --access-log {path_str}: {e}", file=sys.stderr)
+        return None
+
+    if total == 0:
+        print(f"Warning: --access-log {path_str} had no recognizable request lines.", file=sys.stderr)
+        return None
+
+    rpm = None
+    if len(timestamps) >= 2:
+        span_min = (max(timestamps) - min(timestamps)).total_seconds() / 60
+        if span_min > 0:
+            rpm = total / span_min
+
+    return {'total': total, 'by_route': by_route, 'other': other, 'rpm': rpm, 'source': path_str}
+
+
+def _gen_k6_script(routes: list) -> str:
+    """A ready-to-run k6 script hitting up to 5 detected routes, so the
+    modeled throughput number has a direct path to being replaced by a real
+    measurement instead of just being trusted."""
+    def fill(path: str) -> str:
+        return re.sub(r'<[^>]+>|\{[^}]+\}|:[A-Za-z_][A-Za-z0-9_]*', '1', path)
+
+    picks = []
+    for r in routes:
+        method, _, tmpl = r.partition(' ')
+        if method in ('*', 'GET'):
+            picks.append(('GET', fill(tmpl)))
+        if len(picks) >= 5:
+            break
+    if not picks:
+        for r in routes[:5]:
+            method, _, tmpl = r.partition(' ')
+            picks.append((method if method != '*' else 'GET', fill(tmpl)))
+
+    lines = [
+        "import http from 'k6/http';",
+        "import { sleep } from 'k6';",
+        "",
+        "// Generated by workflow-generator. Edit BASE_URL, add auth headers,",
+        "// and replace any `1` path params with real IDs before running.",
+        "// Run: k6 run --env BASE_URL=https://staging.example.com this_file.js",
+        "const BASE_URL = __ENV.BASE_URL || 'http://localhost:8000';",
+        "",
+        "export const options = { vus: 10, duration: '30s' };",
+        "",
+        "export default function () {",
+    ]
+    for method, path in picks:
+        lines.append(f"  http.{method.lower()}(`${{BASE_URL}}{path}`);")
+    lines += ["  sleep(1);", "}"]
+    return '\n'.join(lines)
 
 
 def detect_frontend(root: Path) -> list:
@@ -380,16 +592,35 @@ def detect_llm(root: Path) -> dict:
     py_src = _read_all(root, '*.py')
     js_src = _read_all(root, '*.js') + _read_all(root, '*.ts')
     all_src = py_src + js_src
+    all_src_lower = all_src.lower()
 
-    providers = []
-    if _RE['openai_chat'].search(all_src):
-        providers.append('OpenAI')
-    if _RE['anthropic_chat'].search(all_src):
-        providers.append('Anthropic')
-    if _RE['cohere_chat'].search(all_src):
-        providers.append('Cohere')
-    if _RE['bedrock_chat'].search(all_src):
-        providers.append('AWS Bedrock')
+    # Confirmed = matched an actual usage pattern in source. Declared = the
+    # package is a real dependency (per manifest) but no usage pattern
+    # matched — common when a codebase routes calls through its own
+    # provider-abstraction layer instead of calling the SDK class directly.
+    # Declared-only providers are shown, but with lower confidence, never as
+    # a traced/confirmed fact (see render_arch's `declared` box + infer_flows).
+    _PROVIDER_SPECS = [
+        ('OpenAI', 'openai_chat', ('openai',)),
+        ('Anthropic', 'anthropic_chat', ('anthropic',)),
+        ('Cohere', 'cohere_chat', ('cohere',)),
+        # No dedicated pip package for Bedrock — it's accessed via boto3,
+        # which is also pulled in for plain S3/SQS use. boto3 alone isn't
+        # Bedrock-specific signal, so this stays source-confirm-only (no
+        # manifest fallback tuple).
+        ('AWS Bedrock', 'bedrock_chat', ()),
+        ('Google Gemini', 'gemini_chat', ('google-generativeai', 'google-genai')),
+        ('Mistral', 'mistral_chat', ('mistralai',)),
+        ('Groq', 'groq_chat', ('groq',)),
+        ('Ollama', 'ollama_chat', ('ollama',)),
+        ('LiteLLM (multi-provider)', 'litellm_call', ('litellm',)),
+    ]
+    providers, providers_declared = [], []
+    for name, re_key, pkgs in _PROVIDER_SPECS:
+        if _hinted_search(re_key, all_src, all_src_lower):
+            providers.append(name)
+        elif _manifest_pkg(root, *pkgs):
+            providers_declared.append(name)
 
     timeout = _first_int(_RE['llm_timeout'].search(all_src))
     retries = _first_int(_RE['llm_retries'].search(all_src))
@@ -414,6 +645,7 @@ def detect_llm(root: Path) -> dict:
 
     return {
         'providers': providers,
+        'providers_declared': providers_declared,
         'timeout': timeout,
         'retries': retries,
         'models': models,
@@ -428,33 +660,37 @@ def detect_storage(root: Path) -> list:
     py_src = _read_all(root, '*.py')
     js_src = _read_all(root, '*.js') + _read_all(root, '*.ts')
     all_src = compose + env + py_src + js_src + _read_manifests(root)
+    all_src_lower = all_src.lower()
+
+    def hit(re_key):
+        return _hinted_search(re_key, all_src, all_src_lower)
 
     stores = []
-    if _RE['qdrant'].search(all_src):
+    if hit('qdrant'):
         stores.append({'name': 'Qdrant', 'type': 'vector', 'desc': 'HNSW vector DB', 'color': 'indigo'})
-    if _RE['pinecone'].search(all_src):
+    if hit('pinecone'):
         stores.append({'name': 'Pinecone', 'type': 'vector', 'desc': 'Managed vector DB', 'color': 'indigo'})
-    if _RE['weaviate'].search(all_src):
+    if hit('weaviate'):
         stores.append({'name': 'Weaviate', 'type': 'vector', 'desc': 'Vector DB', 'color': 'indigo'})
-    if _RE['chromadb'].search(all_src):
+    if hit('chromadb'):
         stores.append({'name': 'ChromaDB', 'type': 'vector', 'desc': 'Embedded vector DB', 'color': 'indigo'})
-    if _RE['pgvector'].search(all_src):
+    if hit('pgvector'):
         stores.append({'name': 'pgvector', 'type': 'vector', 'desc': 'Postgres vector ext', 'color': 'indigo'})
-    if _RE['faiss'].search(all_src):
+    if hit('faiss'):
         stores.append({'name': 'FAISS', 'type': 'vector', 'desc': 'In-process ANN search', 'color': 'indigo'})
-    if _RE['milvus'].search(all_src):
+    if hit('milvus'):
         stores.append({'name': 'Milvus', 'type': 'vector', 'desc': 'Distributed vector DB', 'color': 'indigo'})
-    if _RE['postgres'].search(all_src):
+    if hit('postgres'):
         stores.append({'name': 'PostgreSQL', 'type': 'relational', 'desc': 'Primary database', 'color': 'blue'})
-    if _RE['mysql'].search(all_src):
+    if hit('mysql'):
         stores.append({'name': 'MySQL', 'type': 'relational', 'desc': 'Relational database', 'color': 'blue'})
-    if _RE['mongo'].search(all_src):
+    if hit('mongo'):
         stores.append({'name': 'MongoDB', 'type': 'nosql', 'desc': 'Document store', 'color': 'green'})
-    if _RE['sqlite'].search(all_src):
+    if hit('sqlite'):
         stores.append({'name': 'SQLite', 'type': 'relational', 'desc': 'Embedded / dev DB', 'color': 'gray'})
-    if _RE['redis_cache'].search(all_src) or _RE['redis_db'].search(all_src):
+    if hit('redis_cache') or hit('redis_db'):
         stores.append({'name': 'Redis', 'type': 'cache', 'desc': 'Cache / pub-sub', 'color': 'red'})
-    if _RE['s3'].search(all_src):
+    if hit('s3'):
         stores.append({'name': 'S3 / Object Store', 'type': 'object', 'desc': 'File storage', 'color': 'yellow'})
     return stores
 
@@ -463,19 +699,23 @@ def detect_queues(root: Path) -> list:
     all_src = _read_all(root, '*.py') + _read_all(root, '*.js') + _read_all(root, '*.ts')
     compose = _read_file(root, 'docker-compose.prod.yml', 'docker-compose.yml')
     combined = all_src + compose + _read_manifests(root)
+    combined_lower = combined.lower()
+
+    def hit(re_key):
+        return _hinted_search(re_key, combined, combined_lower)
 
     queues = []
-    if _RE['celery'].search(combined):
+    if hit('celery'):
         queues.append({'name': 'Celery', 'desc': 'Distributed task queue', 'color': 'green'})
-    if _RE['bull'].search(combined):
+    if hit('bull'):
         queues.append({'name': 'BullMQ', 'desc': 'Node.js job queue (Redis)', 'color': 'red'})
-    if _RE['kafka'].search(combined):
+    if hit('kafka'):
         queues.append({'name': 'Kafka', 'desc': 'Event streaming', 'color': 'gray'})
-    if _RE['rabbitmq'].search(combined):
+    if hit('rabbitmq'):
         queues.append({'name': 'RabbitMQ', 'desc': 'AMQP message broker', 'color': 'orange'})
-    if _RE['redis_queue'].search(combined):
+    if hit('redis_queue'):
         queues.append({'name': 'RQ (Redis Queue)', 'desc': 'Simple Redis job queue', 'color': 'red'})
-    if _RE['sqs'].search(combined):
+    if hit('sqs'):
         queues.append({'name': 'AWS SQS', 'desc': 'Managed message queue', 'color': 'yellow'})
     return queues
 
@@ -484,21 +724,25 @@ def detect_external_sources(root: Path) -> list:
     all_src = _read_all(root, '*.py') + _read_all(root, '*.js') + _read_all(root, '*.ts')
     env = _read_file(root, '.env', '.env.example', '.env.sample')
     combined = all_src + env + _read_manifests(root)
+    combined_lower = combined.lower()
+
+    def hit(re_key):
+        return _hinted_search(re_key, combined, combined_lower)
 
     sources = []
-    if _RE['jira'].search(combined):
+    if hit('jira'):
         sources.append({'name': 'Jira', 'proto': 'Webhook + REST', 'auth': 'HMAC-SHA256', 'color': 'blue'})
-    if _RE['ado'].search(combined):
+    if hit('ado'):
         sources.append({'name': 'Azure DevOps', 'proto': 'Service Hooks + REST', 'auth': 'SHA1 secret', 'color': 'blue'})
-    if _RE['slack'].search(combined):
+    if hit('slack'):
         sources.append({'name': 'Slack', 'proto': 'Events API', 'auth': 'Signing secret', 'color': 'purple'})
-    if _RE['github'].search(combined):
+    if hit('github'):
         sources.append({'name': 'GitHub', 'proto': 'Webhooks + API', 'auth': 'HMAC-SHA256', 'color': 'gray'})
-    if _RE['stripe'].search(combined):
+    if hit('stripe'):
         sources.append({'name': 'Stripe', 'proto': 'Webhooks + API', 'auth': 'Webhook sig', 'color': 'purple'})
-    if _RE['salesforce'].search(combined):
+    if hit('salesforce'):
         sources.append({'name': 'Salesforce', 'proto': 'REST / SOAP', 'auth': 'OAuth2', 'color': 'blue'})
-    if _RE['twilio'].search(combined):
+    if hit('twilio'):
         sources.append({'name': 'Twilio', 'proto': 'SMS / Voice API', 'auth': 'Account SID', 'color': 'red'})
 
     # Always add "Users / API Clients"
@@ -711,10 +955,21 @@ CSS = """
 :root{--bg:#0f172a;--bg2:#111827;--bg3:#161e2e;--bg4:#1a2535;
 --border:#1e293b;--border2:#263347;--text:#f1f5f9;--muted:#64748b;--dim:#334155;
 --sans:'IBM Plex Sans',system-ui,sans-serif;--mono:'JetBrains Mono',monospace}
+:root[data-theme="light"]{--bg:#f8fafc;--bg2:#ffffff;--bg3:#ffffff;--bg4:#f1f5f9;
+--border:#e2e8f0;--border2:#cbd5e1;--text:#0f172a;--muted:#64748b;--dim:#94a3b8}
+:root[data-theme="light"] body{background-image:radial-gradient(circle,#cbd5e1 1.4px,transparent 1.4px);background-size:24px 24px}
+:root[data-theme="light"] h1{color:#0f172a}
+:root[data-theme="light"] code{color:#0891b2}
+:root[data-theme="light"] .arch-wrap{box-shadow:0 1px 3px rgba(15,23,42,.06)}
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.6}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.6;transition:background .25s,color .25s}
 .page{max-width:1440px;margin:0 auto;padding:40px 32px 80px}
 h1{font-size:28px;font-weight:700;color:#f8fafc;margin-bottom:4px}
+.theme-toggle{position:fixed;top:20px;right:24px;width:40px;height:40px;border-radius:50%;
+border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:17px;
+cursor:pointer;z-index:20;display:flex;align-items:center;justify-content:center;
+box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.theme-toggle:hover{border-color:var(--border2)}
 .subtitle{color:var(--muted);font-size:14px;margin-bottom:40px}
 .section{margin-bottom:56px}
 .section-title{font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
@@ -727,17 +982,58 @@ padding:20px 24px;flex:1;min-width:160px}
 .stat-card .sub{font-size:11px;color:var(--dim);margin-top:2px;font-family:var(--mono)}
 /* Architecture */
 .arch-wrap{background:var(--bg3);border:1px solid var(--border);border-radius:14px;
-padding:24px;overflow-x:auto}
+padding:24px;overflow-x:auto;position:relative}
+.graph-wrap{background:var(--bg3);border:1px solid var(--border);border-radius:14px;
+padding:16px;position:relative;height:640px}
+.graph-wrap canvas{width:100%;height:100%;display:block;border-radius:10px;cursor:grab}
+#graph-search{position:absolute;top:26px;left:26px;z-index:2;background:var(--bg2);
+border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;
+color:var(--text);width:180px;font-family:var(--sans)}
+#graph-search:focus{outline:none;border-color:var(--border2)}
+.graph-legend{position:absolute;bottom:26px;left:26px;right:26px;z-index:2;display:flex;gap:14px 20px;
+flex-wrap:wrap;font-size:10.5px;color:var(--muted);background:rgba(0,0,0,.0)}
+.graph-legend span{display:flex;align-items:center;gap:5px}
+.graph-legend .lg-dot{width:9px;height:9px;border-radius:50%;background:#818cf8;display:inline-block}
+.graph-legend .lg-square{width:9px;height:9px;background:#eab308;display:inline-block;border-radius:2px}
+.graph-legend .lg-ring{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--muted);display:inline-block}
+.graph-tooltip{position:absolute;z-index:3;pointer-events:none;background:var(--bg2);border:1px solid var(--border2);
+border-radius:8px;padding:8px 11px;font-size:11px;color:var(--text);box-shadow:0 4px 16px rgba(0,0,0,.25);
+display:none;max-width:320px;line-height:1.5}
+.graph-tooltip .tt-path{font-family:var(--mono);font-weight:600;word-break:break-all}
+.graph-tooltip .tt-meta{color:var(--muted);font-size:10.5px;margin-top:3px}
+.derivation{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px 18px;margin:0 0 12px}
+.derivation summary{cursor:pointer;font-size:12px;font-weight:600;color:var(--text);list-style:revert}
+.derivation .muted-inline{font-weight:400;color:var(--muted);font-size:11px}
+.derivation-body{margin-top:12px}
+.deriv-row{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11.5px;color:var(--muted);padding:3px 0}
+.deriv-row span:last-child{color:var(--text)}
+.deriv-divider{height:1px;background:var(--border);margin:10px 0}
+.deriv-label{font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px}
+.deriv-assumptions{font-size:11px;color:var(--muted);line-height:1.6}
 .arch-layer{margin-bottom:0}
 .arch-row-label{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
 color:#334155;margin-bottom:8px;padding-left:4px}
 .arch-boxes{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px}
-.arch-box{border:1.5px solid;border-radius:10px;padding:12px 16px;min-width:160px;flex:1;max-width:280px}
+.arch-box{border:1.5px solid;border-radius:10px;padding:12px 16px;min-width:160px;flex:1;max-width:280px;position:relative;color:#f1f5f9}
+.arch-box.declared{border-style:dashed;opacity:.72}
 .arch-box .bname{font-weight:700;font-size:13px;margin-bottom:2px}
+.arch-box .bicon{margin-right:6px;font-size:13px}
 .arch-box .bdesc{font-size:11px;opacity:.7;margin-bottom:4px}
 .arch-box .bcode{font-family:var(--mono);font-size:10px;opacity:.55;margin-top:2px}
-.arch-arrow{text-align:center;color:#2d3f55;font-size:20px;line-height:1;padding:4px 0;
-user-select:none}
+/* Nested storage groups */
+.arch-group{border:1.5px dashed var(--border2);border-radius:12px;padding:14px 10px 10px;
+display:flex;gap:12px;flex-wrap:wrap;position:relative;flex:1;min-width:200px}
+.arch-group-label{position:absolute;top:-9px;left:12px;background:var(--bg3);padding:0 8px;
+font-size:9px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+/* Edge overlay: real node-to-node connections evidenced by a flow's step sequence */
+#edge-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.edge-path{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.85}
+.edge-label{font-family:inherit;font-size:10px;font-weight:600;fill:var(--text);pointer-events:none}
+.edge-label-bg{fill:var(--bg2);stroke:var(--border);stroke-width:1;pointer-events:none}
+@media(prefers-reduced-motion:no-preference){
+.edge-path.animated{stroke-dasharray:8 6;animation:edgeFlow 1s linear infinite}
+}
+@keyframes edgeFlow{to{stroke-dashoffset:-28}}
 /* Flows */
 .flows{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px}
 .flow-card{background:var(--bg3);border:1px solid var(--border);border-radius:12px;overflow:hidden}
@@ -777,28 +1073,516 @@ justify-content:space-between;align-items:center}
 footer{text-align:center;color:var(--dim);font-size:12px;margin-top:60px;
 padding-top:20px;border-top:1px solid var(--border)}
 code{font-family:var(--mono);font-size:11px;color:#06b6d4}
+/* Animated flow: architecture arrows */
+.arch-arrow{position:relative;height:26px}
+.arrow-line{position:absolute;left:50%;top:0;bottom:0;width:2px;background:var(--border2);transform:translateX(-50%)}
+.arrow-dot{position:absolute;left:50%;top:0;width:10px;height:10px;border-radius:50%;
+background:#60a5fa;box-shadow:0 0 8px 2px #60a5fa,0 0 18px 4px rgba(96,165,250,.55);transform:translateX(-50%);opacity:0}
+.arch-boxes{border-radius:14px;padding:6px;margin:-6px -6px 0 -6px}
+@media(prefers-reduced-motion:no-preference){
+.arrow-dot{animation:arrowFlow var(--t,4s) linear infinite;
+animation-delay:calc(var(--i,0)/var(--n,1)*var(--t,4s))}
+.arch-boxes{animation:rowPulse var(--t,4s) ease-in-out infinite;
+animation-delay:calc(var(--i,0)/var(--n,1)*var(--t,4s))}
+.step-num::after{animation:stepFlow var(--t,3s) linear infinite;
+animation-delay:calc(var(--i,0)/var(--n,1)*var(--t,3s))}
+}
+@keyframes arrowFlow{0%{opacity:0;top:0}5%{opacity:1}45%{top:calc(100% - 10px);opacity:1}62%{opacity:0}100%{opacity:0}}
+@keyframes rowPulse{0%,100%{background:transparent;box-shadow:none}
+4%{background:rgba(96,165,250,.12);box-shadow:0 0 0 1px rgba(96,165,250,.4)}
+22%{background:rgba(96,165,250,.12);box-shadow:0 0 0 1px rgba(96,165,250,.4)}
+34%{background:transparent;box-shadow:none}}
+/* Animated flow: step connectors */
+.step-num{position:relative}
+.step-num::before{content:'';position:absolute;left:50%;bottom:100%;width:2px;height:14px;
+background:var(--border2);transform:translateX(-50%)}
+.flow-step:first-child .step-num::before{display:none}
+.step-num::after{content:'';position:absolute;left:50%;top:-14px;width:5px;height:5px;
+border-radius:50%;background:currentColor;opacity:0;transform:translateX(-50%)}
+@keyframes stepFlow{0%{opacity:0;top:-14px}8%{opacity:1}92%{top:0;opacity:1}100%{opacity:0}}
+"""
+
+EDGE_JS = """
+(function(){
+  var toggle = document.getElementById('theme-toggle');
+  var root = document.documentElement;
+  if (toggle) {
+    toggle.addEventListener('click', function(){
+      var goingLight = root.getAttribute('data-theme') !== 'light';
+      root.setAttribute('data-theme', goingLight ? 'light' : 'dark');
+      toggle.textContent = goingLight ? '\\ud83c\\udf19' : '\\u2600\\ufe0f';
+      drawEdges();
+      document.dispatchEvent(new Event('theme-changed'));
+    });
+  }
+
+  var dataEl = document.getElementById('edges-data');
+  var edges = [];
+  try { edges = dataEl ? JSON.parse(dataEl.textContent) : []; } catch (e) { edges = []; }
+  var svg = document.getElementById('edge-overlay');
+  var wrap = document.querySelector('.arch-wrap');
+
+  function nodeMap(){
+    var map = {};
+    if (!wrap) return map;
+    wrap.querySelectorAll('[data-node]').forEach(function(el){
+      map[el.getAttribute('data-node')] = el;
+    });
+    return map;
+  }
+
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+
+  function shortLabel(label){
+    var s = (label || '').split(' (')[0];
+    return s.length > 28 ? s.slice(0, 27) + '\\u2026' : s;
+  }
+
+  function drawEdges(){
+    if (!svg || !wrap || !edges.length) return;
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    var map = nodeMap();
+    var wr = wrap.getBoundingClientRect();
+    svg.setAttribute('width', wrap.scrollWidth);
+    svg.setAttribute('height', wrap.scrollHeight);
+
+    var defs = document.createElementNS(SVG_NS, 'defs');
+    svg.appendChild(defs);
+    var seenColors = {};
+    edges.forEach(function(e){
+      if (seenColors[e.color]) return;
+      seenColors[e.color] = true;
+      var markerId = 'arrow-' + e.color.replace('#', '');
+      var marker = document.createElementNS(SVG_NS, 'marker');
+      marker.setAttribute('id', markerId);
+      marker.setAttribute('viewBox', '0 0 10 10');
+      marker.setAttribute('refX', '8');
+      marker.setAttribute('refY', '5');
+      marker.setAttribute('markerWidth', '7');
+      marker.setAttribute('markerHeight', '7');
+      marker.setAttribute('orient', 'auto-start-reverse');
+      var arrowPath = document.createElementNS(SVG_NS, 'path');
+      arrowPath.setAttribute('d', 'M0,0 L10,5 L0,10 z');
+      arrowPath.setAttribute('fill', e.color);
+      marker.appendChild(arrowPath);
+      defs.appendChild(marker);
+    });
+
+    edges.forEach(function(e){
+      var fromEl = map[e.from];
+      var toEl = map[e.to];
+      if (!fromEl || !toEl) return;
+      var fr = fromEl.getBoundingClientRect();
+      var tr = toEl.getBoundingClientRect();
+      var x1 = fr.left - wr.left + wrap.scrollLeft + fr.width / 2;
+      var y1 = fr.top - wr.top + wrap.scrollTop + fr.height;
+      var x2 = tr.left - wr.left + wrap.scrollLeft + tr.width / 2;
+      var y2 = tr.top - wr.top + wrap.scrollTop;
+      var midY = (y1 + y2) / 2;
+      var d = 'M' + x1 + ',' + y1 + ' L' + x1 + ',' + midY + ' L' + x2 + ',' + midY + ' L' + x2 + ',' + y2;
+      var path = document.createElementNS(SVG_NS, 'path');
+      path.setAttribute('d', d);
+      path.setAttribute('class', 'edge-path animated');
+      path.setAttribute('stroke', e.color);
+      path.setAttribute('marker-end', 'url(#arrow-' + e.color.replace('#', '') + ')');
+      var title = document.createElementNS(SVG_NS, 'title');
+      title.textContent = e.label;
+      path.appendChild(title);
+      svg.appendChild(path);
+
+      var text = document.createElementNS(SVG_NS, 'text');
+      text.setAttribute('class', 'edge-label');
+      text.setAttribute('x', (x1 + x2) / 2);
+      text.setAttribute('y', midY);
+      text.setAttribute('text-anchor', 'middle');
+      text.textContent = shortLabel(e.label);
+      svg.appendChild(text);
+      var bbox = text.getBBox();
+      var bg = document.createElementNS(SVG_NS, 'rect');
+      bg.setAttribute('class', 'edge-label-bg');
+      bg.setAttribute('x', bbox.x - 4);
+      bg.setAttribute('y', bbox.y - 2);
+      bg.setAttribute('width', bbox.width + 8);
+      bg.setAttribute('height', bbox.height + 4);
+      bg.setAttribute('rx', 4);
+      svg.insertBefore(bg, text);
+    });
+  }
+
+  var resizeTimer;
+  window.addEventListener('resize', function(){
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(drawEdges, 150);
+  });
+
+  drawEdges();
+})();
+"""
+
+GRAPH_JS = """
+(function(){
+  var dataEl = document.getElementById('graph-data');
+  if (!dataEl) return;
+  var data = JSON.parse(dataEl.textContent);
+  var canvas = document.getElementById('code-graph');
+  if (!canvas || !data.nodes.length) return;
+  var ctx = canvas.getContext('2d');
+  var wrap = canvas.parentElement;
+  var tooltip = document.getElementById('graph-tooltip');
+  var reduceMotion = !window.matchMedia('(prefers-reduced-motion: no-preference)').matches;
+
+  function hashStr(s){
+    var h = 2166136261;
+    for (var i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0);
+  }
+  function pkgColor(pkg){
+    var h = hashStr(pkg);
+    return 'hsl(' + (h % 360) + ',62%,58%)';
+  }
+
+  var nodes = data.nodes.map(function(n){
+    var h1 = hashStr(n.id), h2 = hashStr(n.id + ':r');
+    var angle = (h1 % 6283) / 1000;
+    var radius = 60 + (h2 % 260);
+    return Object.assign({}, n, {
+      x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, vx: 0, vy: 0, fixed: false,
+    });
+  });
+  var byId = {};
+  nodes.forEach(function(n){ byId[n.id] = n; });
+  var links = data.links.filter(function(l){ return byId[l.s] && byId[l.t]; }).map(function(l){
+    return Object.assign({}, l, {phase: (hashStr(l.s + l.t) % 1000) / 1000});
+  });
+  var degree = {};
+  links.forEach(function(l){
+    degree[l.s] = degree[l.s] || {in: 0, out: 0};
+    degree[l.t] = degree[l.t] || {in: 0, out: 0};
+    degree[l.s].out++;
+    degree[l.t].in++;
+  });
+
+  function nodeRadius(n){
+    if (n.kind === 'service' || n.kind === 'entry') return 15;
+    if (n.kind === 'dir') return Math.max(6, Math.min(20, 5 + Math.sqrt(n.file_count || 1) * 3));
+    return Math.max(3, Math.min(14, 3 + Math.sqrt(n.loc || 1) * 0.55));
+  }
+  function nodeFill(n){
+    if (n.kind === 'service' || n.kind === 'entry') return n.color;
+    return pkgColor(n.pkg);
+  }
+
+  // ── Force simulation: O(n^2) repulsion + spring edges + centering. n is
+  // capped (file cap / directory aggregation upstream), so this stays cheap. ──
+  var alpha = 1;
+  function tick(){
+    var n = nodes.length;
+    for (var i = 0; i < n; i++){
+      var a = nodes[i];
+      if (a.fixed) continue;
+      var fx = -a.x * 0.004, fy = -a.y * 0.004; // gentle centering
+      for (var j = 0; j < n; j++){
+        if (i === j) continue;
+        var b = nodes[j];
+        var dx = a.x - b.x, dy = a.y - b.y;
+        var d2 = dx*dx + dy*dy + 0.01;
+        var f = 1400 / d2;
+        fx += dx * f; fy += dy * f;
+      }
+      a.vx = (a.vx + fx * alpha) * 0.82;
+      a.vy = (a.vy + fy * alpha) * 0.82;
+    }
+    links.forEach(function(l){
+      var s = byId[l.s], t = byId[l.t];
+      var dx = t.x - s.x, dy = t.y - s.y;
+      var dist = Math.sqrt(dx*dx + dy*dy) || 1;
+      var target = 90;
+      var f = (dist - target) * 0.012 * alpha;
+      var ux = dx / dist, uy = dy / dist;
+      if (!s.fixed){ s.vx += ux * f; s.vy += uy * f; }
+      if (!t.fixed){ t.vx -= ux * f; t.vy -= uy * f; }
+    });
+    nodes.forEach(function(a){
+      if (a.fixed) return;
+      a.x += a.vx; a.y += a.vy;
+    });
+    alpha = Math.max(0.02, alpha * 0.985);
+  }
+  for (var i = 0; i < 220; i++) tick(); // settle to a deterministic resting layout before first paint
+
+  var view = {x: 0, y: 0, scale: 1};
+  var selected = null, hovered = null, searchMatch = null;
+
+  function worldToScreen(x, y){
+    var r = canvas.getBoundingClientRect();
+    return [r.width/2 + view.x + x * view.scale, r.height/2 + view.y + y * view.scale];
+  }
+  function screenToWorld(sx, sy){
+    var r = canvas.getBoundingClientRect();
+    return [(sx - r.width/2 - view.x) / view.scale, (sy - r.height/2 - view.y) / view.scale];
+  }
+
+  function related(id){
+    var set = {};
+    set[id] = true;
+    links.forEach(function(l){
+      if (l.s === id) set[l.t] = true;
+      if (l.t === id) set[l.s] = true;
+    });
+    return set;
+  }
+
+  var cs = getComputedStyle(document.documentElement);
+  var colors = {};
+  function refreshColors(){
+    cs = getComputedStyle(document.documentElement);
+    colors.text = cs.getPropertyValue('--text').trim() || '#f1f5f9';
+    colors.muted = cs.getPropertyValue('--muted').trim() || '#64748b';
+    colors.edge = cs.getPropertyValue('--border2').trim() || '#334155';
+    colors.bg = cs.getPropertyValue('--bg3').trim() || '#161e2e';
+  }
+  refreshColors();
+  document.addEventListener('theme-changed', refreshColors);
+
+  var particleSpeed = 0.00025;
+  var lastT = null;
+
+  function draw(t){
+    if (lastT === null) lastT = t;
+    var dt = t - lastT; lastT = t;
+    var r = canvas.getBoundingClientRect();
+    if (canvas.width !== Math.round(r.width * devicePixelRatio)){
+      canvas.width = r.width * devicePixelRatio;
+      canvas.height = r.height * devicePixelRatio;
+    }
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    ctx.clearRect(0, 0, r.width, r.height);
+
+    var highlightSet = selected ? related(selected) : (searchMatch || null);
+
+    links.forEach(function(l){
+      var s = byId[l.s], t2 = byId[l.t];
+      var p1 = worldToScreen(s.x, s.y), p2 = worldToScreen(t2.x, t2.y);
+      var dim = highlightSet && !(highlightSet[l.s] && highlightSet[l.t]);
+      ctx.beginPath();
+      ctx.moveTo(p1[0], p1[1]);
+      ctx.lineTo(p2[0], p2[1]);
+      ctx.strokeStyle = colors.edge;
+      ctx.globalAlpha = dim ? 0.08 : (l.kind === 'service' ? 0.55 : 0.35);
+      ctx.lineWidth = Math.min(2.5, 0.6 + (l.w || 1) * 0.15);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      if (!reduceMotion && !dim){
+        if (!l._phase) l._phase = l.phase;
+        // Real observed-traffic weight (from --access-log) speeds the
+        // particle up (log-scaled — raw request counts span orders of
+        // magnitude); unweighted edges just show dependency direction.
+        var hasTraffic = l.kind === 'entry' && l.w;
+        var speedMul = hasTraffic ? Math.min(5, 1 + Math.log2(l.w + 1) * 0.5) : 1;
+        l._phase = (l._phase + dt * particleSpeed * speedMul) % 1;
+        [l._phase, (l._phase + 0.5) % 1].forEach(function(ph){
+          var px = p1[0] + (p2[0]-p1[0]) * ph, py = p1[1] + (p2[1]-p1[1]) * ph;
+          ctx.beginPath();
+          ctx.arc(px, py, 1.8, 0, 7);
+          ctx.fillStyle = hasTraffic ? '#f59e0b' : (l.kind === 'service' ? '#60a5fa' : colors.muted);
+          ctx.globalAlpha = 0.9;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        });
+      }
+    });
+
+    nodes.forEach(function(n){
+      var p = worldToScreen(n.x, n.y);
+      var rad = nodeRadius(n) * Math.max(0.6, Math.min(1.4, view.scale));
+      var dim = highlightSet && !highlightSet[n.id];
+      ctx.globalAlpha = dim ? 0.15 : 1;
+      ctx.beginPath();
+      if (n.kind === 'service' || n.kind === 'entry'){
+        var s2 = rad * 1.5;
+        ctx.fillStyle = nodeFill(n);
+        ctx.strokeStyle = colors.bg;
+        ctx.lineWidth = 2;
+        ctx.roundRect ? ctx.roundRect(p[0]-s2/2, p[1]-s2/2, s2, s2, 4) : ctx.rect(p[0]-s2/2, p[1]-s2/2, s2, s2);
+        ctx.fill(); ctx.stroke();
+      } else {
+        ctx.arc(p[0], p[1], rad, 0, 7);
+        ctx.fillStyle = nodeFill(n);
+        ctx.fill();
+      }
+      var showLabel = n.kind !== 'file' || view.scale > 1.6 || n.id === hovered || (highlightSet && highlightSet[n.id]);
+      if (showLabel && !dim){
+        ctx.font = (n.kind === 'service' || n.kind === 'entry' ? '600 ' : '') + '10px system-ui,sans-serif';
+        ctx.fillStyle = colors.text;
+        ctx.fillText((n.icon ? n.icon + ' ' : '') + n.label, p[0] + rad + 4, p[1] + 3);
+      }
+      ctx.globalAlpha = 1;
+    });
+
+    if (alpha > 0.03){ tick(); }
+    if (running) requestAnimationFrame(draw);
+  }
+
+  // ── Interaction: wheel zoom (cursor-anchored), drag pan/move, click select ──
+  var dragging = null, panStart = null, moved = false;
+  canvas.addEventListener('wheel', function(e){
+    e.preventDefault();
+    var r = canvas.getBoundingClientRect();
+    var mx = e.clientX - r.left, my = e.clientY - r.top;
+    var before = screenToWorld(mx, my);
+    var factor = Math.exp(-e.deltaY * 0.001);
+    view.scale = Math.max(0.25, Math.min(6, view.scale * factor));
+    var after = worldToScreen(before[0], before[1]);
+    view.x += mx - after[0]; view.y += my - after[1];
+  }, {passive: false});
+
+  function pick(mx, my){
+    var w = screenToWorld(mx, my);
+    var best = null, bestD = 1e9;
+    nodes.forEach(function(n){
+      var d = Math.hypot(n.x - w[0], n.y - w[1]);
+      var rad = nodeRadius(n) + 3;
+      if (d < rad && d < bestD){ best = n; bestD = d; }
+    });
+    return best;
+  }
+
+  canvas.addEventListener('mousedown', function(e){
+    var r = canvas.getBoundingClientRect();
+    var mx = e.clientX - r.left, my = e.clientY - r.top;
+    var hit = pick(mx, my);
+    moved = false;
+    if (hit){ dragging = hit; hit.fixed = true; }
+    else { panStart = {x: e.clientX - view.x, y: e.clientY - view.y}; }
+  });
+  window.addEventListener('mousemove', function(e){
+    var r = canvas.getBoundingClientRect();
+    var mx = e.clientX - r.left, my = e.clientY - r.top;
+    if (dragging){
+      moved = true;
+      var w = screenToWorld(mx, my);
+      dragging.x = w[0]; dragging.y = w[1];
+      alpha = Math.max(alpha, 0.3);
+      tooltip.style.display = 'none';
+    } else if (panStart){
+      moved = true;
+      tooltip.style.display = 'none';
+      view.x = e.clientX - panStart.x; view.y = e.clientY - panStart.y;
+    } else {
+      var hit = pick(mx, my);
+      hovered = hit ? hit.id : null;
+      canvas.style.cursor = hit ? 'pointer' : 'grab';
+      if (hit){
+        var deg = degree[hit.id] || {in: 0, out: 0};
+        var metaBits = [];
+        if (hit.kind === 'file') metaBits.push(hit.loc + ' line' + (hit.loc === 1 ? '' : 's'));
+        if (hit.kind === 'dir') metaBits.push(hit.file_count + ' file' + (hit.file_count === 1 ? '' : 's') + ' aggregated', hit.loc + ' total lines');
+        metaBits.push(deg.in + ' in \\u2192 node \\u2192 ' + deg.out + ' out');
+        tooltip.innerHTML = '<div class="tt-path">' + (hit.icon ? hit.icon + ' ' : '') + hit.id + '</div>'
+          + '<div class="tt-meta">' + metaBits.join(' \\u00b7 ') + '</div>';
+        tooltip.style.display = 'block';
+        var flip = mx > r.width * 0.6;
+        tooltip.style.left = (flip ? mx - 14 : mx + 14) + 'px';
+        tooltip.style.top = (my + 16) + 'px';
+        tooltip.style.transform = flip ? 'translateX(-100%)' : '';
+      } else {
+        tooltip.style.display = 'none';
+      }
+    }
+  });
+  window.addEventListener('mouseup', function(){
+    if (dragging) dragging.fixed = false;
+    dragging = null; panStart = null;
+  });
+  canvas.addEventListener('mouseleave', function(){
+    hovered = null;
+    tooltip.style.display = 'none';
+  });
+  canvas.addEventListener('click', function(e){
+    if (moved) return;
+    var r = canvas.getBoundingClientRect();
+    var hit = pick(e.clientX - r.left, e.clientY - r.top);
+    selected = hit ? (selected === hit.id ? null : hit.id) : null;
+  });
+
+  var search = document.getElementById('graph-search');
+  if (search){
+    search.addEventListener('input', function(){
+      var q = search.value.trim().toLowerCase();
+      if (!q){ searchMatch = null; return; }
+      var set = {};
+      nodes.forEach(function(n){ if (n.label.toLowerCase().indexOf(q) !== -1) set[n.id] = true; });
+      searchMatch = set;
+    });
+  }
+
+  var running = false;
+  var obs = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if (en.isIntersecting && !running){ running = true; requestAnimationFrame(draw); }
+      else if (!en.isIntersecting){ running = false; }
+    });
+  }, {threshold: 0.01});
+  obs.observe(wrap);
+  running = true;
+  requestAnimationFrame(draw);
+})();
 """
 
 
-def _box(name: str, desc: str, color: str, code: str = '', extra_desc: str = '') -> str:
+def _box(name: str, desc: str, color: str, code: str = '', extra_desc: str = '', declared: bool = False, icon: str = '') -> str:
     bg = C.get(f'{color}_d', '#1a2535')
     border = C.get(color, '#475569')
+    glow = f"rgba({int(border[1:3],16)},{int(border[3:5],16)},{int(border[5:7],16)},.45)"
     full_desc = desc
     if extra_desc:
         full_desc = f"{desc} · {extra_desc}"
     code_line = f'<div class="bcode">{code}</div>' if code else ''
+    # Declared-only boxes (dependency found in manifest, no usage pattern
+    # confirmed in source) get no data-node — they must never anchor an
+    # edge in compute_edges(), since usage isn't confirmed. They also skip
+    # the icon: showing one would imply more confidence than the dashed
+    # styling already signals.
+    cls = 'arch-box declared' if declared else 'arch-box'
+    node_attr = '' if declared else f' data-node="{name}"'
+    icon_span = f'<span class="bicon">{icon}</span>' if (icon and not declared) else ''
     return (
-        f'<div class="arch-box" style="background:{bg};border-color:{border}">'
-        f'<div class="bname" style="color:{border}">{name}</div>'
+        f'<div class="{cls}"{node_attr} style="background:{bg};border-color:{border};--gc:{glow}">'
+        f'<div class="bname" style="color:{border}">{icon_span}{name}</div>'
         f'<div class="bdesc">{full_desc}</div>{code_line}</div>'
     )
 
 
-def _arrow() -> str:
-    return '<div class="arch-arrow">↓</div>'
+_STORE_ICONS = {'vector': '🔍', 'relational': '🗄️', 'nosql': '🗂️', 'cache': '⚡', 'object': '📦'}
 
 
-def render_arch(analysis: dict) -> str:
+def _cap_diverse(items: list, n: int) -> list:
+    """Cap a list to n items, round-robin across distinct `type` values first —
+    so a real multi-type result isn't silently narrowed to one type just
+    because that type happened to be appended first upstream."""
+    buckets: dict = {}
+    for it in items:
+        buckets.setdefault(it['type'], []).append(it)
+    order = list(buckets.keys())
+    result: list = []
+    idx = {k: 0 for k in order}
+    while len(result) < n and any(idx[k] < len(buckets[k]) for k in order):
+        for k in order:
+            if len(result) >= n:
+                break
+            if idx[k] < len(buckets[k]):
+                result.append(buckets[k][idx[k]])
+                idx[k] += 1
+    return result
+
+
+def _arrow(i: int) -> str:
+    return (f'<div class="arch-arrow" style="--i:{i}">'
+            f'<div class="arrow-line"></div><div class="arrow-dot"></div></div>')
+
+
+def render_arch(analysis: dict) -> tuple[str, set]:
     ext = analysis['external_sources']
     gw = analysis['gateway']
     api = analysis['api_server']
@@ -810,16 +1594,24 @@ def render_arch(analysis: dict) -> str:
     concur = analysis['concurrency']
 
     parts = []
+    layer_idx = 0
+    box_names: set = set()
+
+    def box(name: str, desc: str, color: str, code: str = '', extra_desc: str = '', icon: str = '') -> str:
+        box_names.add(name)
+        return _box(name, desc, color, code, extra_desc, icon=icon)
 
     def layer(label: str, boxes: list[str]) -> None:
+        nonlocal layer_idx
         parts.append(f'<div class="arch-layer"><div class="arch-row-label">{label}</div>'
-                     f'<div class="arch-boxes">{"".join(boxes)}</div></div>')
-        parts.append(_arrow())
+                     f'<div class="arch-boxes" style="--i:{layer_idx}">{"".join(boxes)}</div></div>')
+        parts.append(_arrow(layer_idx))
+        layer_idx += 1
 
     # Row 0: External sources
     ext_boxes = []
     for s in ext[:5]:
-        ext_boxes.append(_box(s['name'], s['proto'], s['color'], s.get('auth', '') or ''))
+        ext_boxes.append(box(s['name'], s['proto'], s['color'], s.get('auth', '') or '', icon='🌐'))
     if ext_boxes:
         layer('EXTERNAL SOURCES &amp; CLIENTS', ext_boxes)
 
@@ -830,7 +1622,7 @@ def render_arch(analysis: dict) -> str:
             rl_summary = ' · '.join(f"{r['rate']} burst={r['burst']}" for r in gw['rate_limits'][:2])
         extra = f"TLS · {rl_summary}" if rl_summary else 'TLS termination'
         layer('GATEWAY / REVERSE PROXY', [
-            _box(gw['type'], f"worker_connections {gw.get('worker_connections') or '?'}", 'gray', extra)
+            box(gw['type'], f"worker_connections {gw.get('worker_connections') or '?'}", 'gray', extra, icon='🚦')
         ])
 
     # Row 2: Application
@@ -839,20 +1631,20 @@ def render_arch(analysis: dict) -> str:
                 'Express': 'yellow', 'Gin (Go)': 'cyan', 'Spring Boot': 'orange'}.get(api['framework'], 'blue')
     worker_label = f"{'async ' if workers['is_async'] else ''}{(workers.get('uvicorn_workers') or 1)} worker{'s' if (workers.get('uvicorn_workers') or 1) > 1 else ''} × {workers['replicas']} replica{'s' if workers['replicas'] > 1 else ''}"
     auth_methods = ' · '.join(k for k, v in api['auth'].items() if v)
-    app_boxes.append(_box(api['framework'], worker_label, fw_color, auth_methods or ''))
+    app_boxes.append(box(api['framework'], worker_label, fw_color, auth_methods or '', icon='⚙️'))
     for f in fe:
-        app_boxes.append(_box(f['name'], f['desc'], f['color']))
+        app_boxes.append(box(f['name'], f['desc'], f['color'], icon='🖥️'))
     layer('APPLICATION LAYER', app_boxes)
 
     # Row 3: Processing
     proc_boxes = []
     if concur.get('semaphores'):
-        proc_boxes.append(_box('Privacy / Preprocessing', 'CPU-bound — thread pool', 'purple',
-                               f"Semaphore({min(concur['semaphores'])})"))
+        proc_boxes.append(box('Privacy / Preprocessing', 'CPU-bound — thread pool', 'purple',
+                               f"Semaphore({min(concur['semaphores'])})", icon='🧮'))
     for q in queues:
-        proc_boxes.append(_box(q['name'], q['desc'], q['color']))
+        proc_boxes.append(box(q['name'], q['desc'], q['color'], icon='📨'))
     if not proc_boxes and api['auth'].get('jwt'):
-        proc_boxes.append(_box('Auth Middleware', 'JWT decode · RBAC scope check', 'yellow'))
+        proc_boxes.append(box('Auth Middleware', 'JWT decode · RBAC scope check', 'yellow', icon='🔑'))
     if proc_boxes:
         layer('PROCESSING &amp; QUEUE LAYER', proc_boxes)
 
@@ -862,24 +1654,50 @@ def render_arch(analysis: dict) -> str:
         for p in llm['providers'][:2]:
             timeout_str = f"timeout={llm['timeout']}s" if llm.get('timeout') else ''
             model_str = ', '.join(llm['models'][:1]) or p
-            intel_boxes.append(_box(p, model_str, 'pink', timeout_str))
+            intel_boxes.append(box(p, model_str, 'pink', timeout_str, icon='🧠'))
     if llm.get('embedding'):
-        intel_boxes.append(_box('Embedding', llm['embedding'][0], 'cyan',
-                                f"batch={concur.get('batch_size') or '?'}"))
+        intel_boxes.append(box('Embedding', llm['embedding'][0], 'cyan',
+                                f"batch={concur.get('batch_size') or '?'}", icon='🔎'))
     if llm.get('eval_framework'):
-        intel_boxes.append(_box(llm['eval_framework'], 'Quality scoring', 'yellow', 'RAG Triad'))
+        intel_boxes.append(box(llm['eval_framework'], 'Quality scoring', 'yellow', 'RAG Triad', icon='📊'))
+    # Declared-but-unconfirmed providers: real dependency (per manifest), no
+    # usage pattern matched in source — rendered dashed via _box(..., declared=True)
+    # directly (bypassing the box() closure) so they never enter box_names and
+    # can never anchor a compute_edges() connection.
+    for p in llm.get('providers_declared', [])[:3]:
+        intel_boxes.append(_box(p, 'Declared dependency', 'gray',
+                                 extra_desc='usage pattern not matched in source', declared=True))
     if intel_boxes:
         layer('AI / INTELLIGENCE LAYER', intel_boxes)
 
-    # Row 5: Storage (no arrow after last)
+    # Row 5: Storage (no arrow after last) — grouped by real detect_storage() `type`
+    # field when 2+ distinct types are present, otherwise flat as before.
     if storage:
-        store_boxes = [_box(s['name'], s['desc'], s['color']) for s in storage[:6]]
+        limited = _cap_diverse(storage, 6)
+        distinct_types = {s['type'] for s in limited}
+        if len(distinct_types) >= 2:
+            groups: dict = {}
+            for s in limited:
+                groups.setdefault(s['type'], []).append(s)
+            group_html = ''.join(
+                f'<div class="arch-group"><div class="arch-group-label">{t}</div>'
+                f'{"".join(box(s["name"], s["desc"], s["color"], icon=_STORE_ICONS.get(s["type"], "")) for s in items)}</div>'
+                for t, items in groups.items()
+            )
+            store_inner = f'<div class="arch-boxes" style="--i:{layer_idx}">{group_html}</div>'
+        else:
+            store_boxes = [box(s['name'], s['desc'], s['color'], icon=_STORE_ICONS.get(s['type'], '')) for s in limited]
+            store_inner = f'<div class="arch-boxes" style="--i:{layer_idx}">{"".join(store_boxes)}</div>'
         parts.append(
-            f'<div class="arch-layer"><div class="arch-row-label">STORAGE &amp; PERSISTENCE</div>'
-            f'<div class="arch-boxes">{"".join(store_boxes)}</div></div>'
+            f'<div class="arch-layer"><div class="arch-row-label">STORAGE &amp; PERSISTENCE</div>{store_inner}</div>'
         )
+        n = layer_idx + 1
+    else:
+        n = layer_idx
 
-    return '\n'.join(parts)
+    total = n * 0.9 + 1.6
+    html = f'<div class="arch-flow" style="--n:{n};--t:{total}s">' + '\n'.join(parts) + '</div>'
+    return html, box_names
 
 
 def render_concurrency_table(analysis: dict, cap: dict) -> str:
@@ -1006,6 +1824,25 @@ def render_bottlenecks(analysis: dict, cap: dict) -> str:
     return f'<div class="bn-grid">{"".join(items)}</div>'
 
 
+def compute_edges(flows: list, box_names: set) -> list:
+    """Real node-to-node edges: only drawn when consecutive steps within one
+    already-vetted flow each unambiguously (whole-word, single-match) name a
+    box that render_arch() actually rendered. Zero/multi-match steps are
+    skipped rather than guessed."""
+    edges, seen = [], set()
+    for fl in flows:
+        matched = []
+        for step in fl['steps']:
+            text = ' '.join(filter(None, [step.get('title', ''), step.get('desc', ''), step.get('code') or '']))
+            hits = {n for n in box_names if re.search(r'\b' + re.escape(n) + r'\b', text)}
+            matched.append(next(iter(hits)) if len(hits) == 1 else None)
+        for a, b in zip(matched, matched[1:]):
+            if a and b and a != b and (a, b) not in seen:
+                seen.add((a, b))
+                edges.append({'from': a, 'to': b, 'color': C.get(fl['color'], '#475569'), 'label': fl['title']})
+    return edges
+
+
 def render_html(analysis: dict, project_name: str) -> str:
     today = datetime.date.today().strftime('%Y-%m-%d')
     cap = analysis['capacity']
@@ -1029,9 +1866,52 @@ def render_html(analysis: dict, project_name: str) -> str:
         stats += stat(str(min(concur['semaphores'])), '#a855f7', 'Max Parallel CPU Tasks', 'asyncio.Semaphore limit')
     if cap.get('rate_limit_str'):
         stats += stat(cap['rate_limit_str'].split()[0], '#f97316', 'Rate Limit (Gateway)', cap['rate_limit_str'])
-    stats += stat(cap['practical'], '#eab308', 'Practical Throughput', f"bottleneck: {cap['bottleneck']}")
+    stats += stat(cap['practical'], '#eab308', 'Modeled Throughput', f"static model, not a load test — bottleneck: {cap['bottleneck']}")
     if llm.get('timeout') and llm.get('providers'):
         stats += stat(f"{llm['timeout']}s", '#06b6d4', 'LLM Timeout', ', '.join(llm['providers'][:1]))
+    access_log_stat = analysis.get('access_log')
+    if access_log_stat and access_log_stat.get('rpm'):
+        stats += stat(f"~{access_log_stat['rpm']:,.0f}/min", '#f59e0b', 'Observed Traffic',
+                       f"measured — {access_log_stat['total']:,} requests in {Path(access_log_stat['source']).name}")
+
+    # Derivation panel: the *inputs* behind "Modeled Throughput", not just its
+    # output — every value here is one compute_concurrency() already returns.
+    deriv_rows = (
+        f'<div class="deriv-row"><span>Worker processes</span><span>{cap["total_workers"]}</span></div>'
+        f'<div class="deriv-row"><span>Per-worker concurrency (assumed)</span><span>{cap["per_worker_io"]} '
+        f'{"(async — ~100 concurrent tasks/worker is a heuristic, not measured)" if cap["is_async"] else "(sync — one request at a time)"}</span></div>'
+        f'<div class="deriv-row"><span>{cap["total_workers"]} workers × {cap["per_worker_io"]}</span><span>= {cap["total_io"]} concurrency ceiling</span></div>'
+    )
+    if cap.get('sem_limit'):
+        deriv_rows += f'<div class="deriv-row"><span>Semaphore limit × workers</span><span>{cap["sem_limit"]} × {cap["total_workers"]}</span></div>'
+    ranking_rows = ''.join(
+        f'<div class="deriv-row"><span>{i+1}. {label}</span><span>{f"{value:,.0f}/min" if cap["ranking_kind"]=="rpm" else f"{value:,.0f} concurrent"}</span></div>'
+        for i, (label, value) in enumerate(cap.get('ranking', []))
+    )
+    derivation_html = f"""
+<details class="derivation">
+<summary>How was "Modeled Throughput" computed? <span class="muted-inline">(static model — click to expand)</span></summary>
+<div class="derivation-body">
+{deriv_rows}
+<div class="deriv-divider"></div>
+<div class="deriv-label">Ranked constraints (tightest wins — this is the bottleneck):</div>
+{ranking_rows}
+<div class="deriv-divider"></div>
+<div class="deriv-assumptions">Assumptions baked into this model: ~100 concurrent tasks per async worker
+is a heuristic, not a measurement; an in-flight LLM call is modeled as occupying its slot for the full
+configured timeout{f" ({llm['timeout']}s)" if llm.get('timeout') else ''}, though real completions are usually
+faster. Treat this number as a starting estimate, not a capacity guarantee.</div>
+</div>
+</details>
+<details class="derivation">
+<summary>Verify with a real load test <span class="muted-inline">(generated k6 script — click to expand)</span></summary>
+<div class="derivation-body">
+<p style="margin:0 0 10px;font-size:11.5px;color:var(--muted)">Pre-filled with up to 5 detected routes. Run this against a staging deploy to replace the model above with a measurement.</p>
+<pre id="k6-script" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:11px;overflow-x:auto;margin:0 0 10px">{_gen_k6_script(analysis['api_server'].get('routes', []))}</pre>
+<button type="button" onclick="navigator.clipboard.writeText(document.getElementById('k6-script').textContent);this.textContent='Copied!';setTimeout(()=>this.textContent='Copy script',1500)" style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-size:11px;color:var(--text);cursor:pointer;font-family:var(--sans)">Copy script</button>
+</div>
+</details>
+""" if analysis['api_server'].get('routes') else ''
 
     # Flow cards HTML
     flow_html = ''
@@ -1039,37 +1919,92 @@ def render_html(analysis: dict, project_name: str) -> str:
         color = fl['color']
         hex_c = C.get(color, '#475569')
         bg_c = C.get(f'{color}_d', '#1a2535')
+        n_steps = len(fl['steps'])
+        step_total = n_steps * 0.8 + 1.2
         step_rows = ''
         for i, step in enumerate(fl['steps'], 1):
             code_line = f'<div class="step-code">{step["code"]}</div>' if step.get('code') else ''
             step_rows += (
                 f'<div class="flow-step">'
-                f'<div class="step-num" style="background:rgba({int(hex_c[1:3],16)},{int(hex_c[3:5],16)},{int(hex_c[5:7],16)},.15);color:{hex_c}">{i}</div>'
+                f'<div class="step-num" style="background:rgba({int(hex_c[1:3],16)},{int(hex_c[3:5],16)},{int(hex_c[5:7],16)},.15);color:{hex_c};--i:{i-1}">{i}</div>'
                 f'<div><div class="step-title">{step["title"]}</div>'
                 f'<div class="step-desc">{step["desc"]}</div>{code_line}</div></div>'
             )
         flow_html += (
-            f'<div class="flow-card">'
+            f'<div class="flow-card" style="--n:{n_steps};--t:{step_total}s">'
             f'<div class="flow-header" style="background:rgba({int(hex_c[1:3],16)},{int(hex_c[3:5],16)},{int(hex_c[5:7],16)},.08)">'
             f'<div class="dot" style="background:{hex_c}"></div>{fl["title"]}</div>'
             f'{step_rows}</div>'
         )
 
-    # Route list snippet
+    # Route list snippet — gains a real "requests" column when --access-log
+    # was supplied; the counts are parsed, never estimated.
     routes = analysis['api_server'].get('routes', [])[:10]
+    access_log_for_routes = analysis.get('access_log')
     route_html = ''
     if routes:
-        route_items = ''.join(f'<div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">{r}</div>' for r in routes)
+        if access_log_for_routes:
+            by_route = access_log_for_routes['by_route']
+            route_items = ''.join(
+                f'<div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">'
+                f'<span>{r}</span><span style="color:var(--text)">{by_route.get(r, 0):,}</span></div>'
+                for r in routes
+            )
+            total_line = (
+                f'<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:10.5px;color:var(--muted)">'
+                f'{access_log_for_routes["total"]:,} requests parsed from <code>{access_log_for_routes["source"]}</code>'
+                f'{" · " + str(access_log_for_routes["other"]) + " matched no known route" if access_log_for_routes["other"] else ""}</div>'
+            )
+        else:
+            route_items = ''.join(f'<div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">{r}</div>' for r in routes)
+            total_line = ''
         route_html = (
             f'<div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;'
             f'padding:16px 20px;margin-top:20px">'
             f'<div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Detected API Routes ({len(routes)}{"+" if len(analysis["api_server"].get("routes",[]))>10 else ""})</div>'
-            f'{route_items}</div>'
+            f'{route_items}{total_line}</div>'
         )
 
-    arch_html = render_arch(analysis)
+    arch_html, box_names = render_arch(analysis)
+    edges = compute_edges(flows, box_names)
+    edges_json = json.dumps(edges)
     table_html = render_concurrency_table(analysis, cap)
     bn_html = render_bottlenecks(analysis, cap)
+
+    graph = analysis.get('graph') or {'nodes': [], 'links': [], 'meta': {'files': 0, 'links': 0, 'aggregated': False, 'shown_nodes': 0, 'has_access_log': False}}
+    graph_json = json.dumps(graph)
+    gm = graph['meta']
+    graph_note = (
+        f"{gm['files']} files aggregated into {gm['shown_nodes']} directories" if gm['aggregated']
+        else f"{gm['shown_nodes']} modules"
+    )
+    graph_section = ''
+    if graph['nodes']:
+        access_log = analysis.get('access_log')
+        traffic_note = (
+            f" Amber particles on entry edges are <b>real</b> traffic, weighted by request count from <code>{access_log['source']}</code> ({access_log['total']:,} requests parsed)."
+            if gm.get('has_access_log') and access_log else
+            " This is <b>static analysis, not live monitoring</b> — particle motion shows dependency direction (importer → imported), not request traffic. Pass <code>--access-log &lt;path&gt;</code> to overlay real per-route request counts instead."
+        )
+        graph_section = f"""
+<div class="section">
+<div class="section-title">Codebase Graph — {graph_note} · {gm['links']} real connections</div>
+<p style="font-size:11px;color:var(--muted);margin:-4px 0 16px">Every node is a real file{' or directory' if gm['aggregated'] else ''} in this repo; every line is an actual import statement, or a pattern-confirmed service call scanned per-file (the same signal behind the summary below, localized to its source).{traffic_note} Drag a node, scroll to zoom, click to isolate its connections, or search below.</p>
+<div class="graph-wrap">
+<canvas id="code-graph"></canvas>
+<div id="graph-tooltip" class="graph-tooltip"></div>
+<input id="graph-search" placeholder="filter modules…">
+<div class="graph-legend">
+<span><span class="lg-dot" style="background:#22c55e"></span>entry (HTTP clients)</span>
+<span><span class="lg-dot" style="border-radius:2px"></span>module (colored by package)</span>
+<span><span class="lg-square"></span>external service (pattern-confirmed)</span>
+<span>→ arrow = "imports / calls" (static — not live traffic{" unless amber" if gm.get('has_access_log') else ""})</span>
+<span><span class="lg-ring"></span><b style="color:var(--text)">click a node</b>&nbsp;to isolate its call paths (dims everything else); click empty space to clear, type in the search box to highlight by name</span>
+</div>
+</div>
+<script type="application/json" id="graph-data">{graph_json}</script>
+</div>
+"""
 
     ext_count = len(analysis['external_sources'])
     storage_count = len(analysis['storage'])
@@ -1088,16 +2023,20 @@ def render_html(analysis: dict, project_name: str) -> str:
 <style>{CSS}</style>
 </head>
 <body>
+<button id="theme-toggle" class="theme-toggle" aria-label="Toggle light/dark theme" title="Toggle theme">&#9728;&#65039;</button>
 <div class="page">
 <h1>{project_name} — System Workflow</h1>
 <p class="subtitle">Component communication map · concurrent request capacity · bottleneck analysis · {today}</p>
 
 <div class="stat-row">{stats}</div>
-<p style="font-size:11px;color:var(--muted);margin:-28px 0 40px">Capacity figures are static-analysis estimates (heuristic: ~100 concurrent tasks per async worker), not load-test results.</p>
-
+<p style="font-size:11px;color:var(--muted);margin:-28px 0 20px">Capacity figures are static-analysis estimates (heuristic: ~100 concurrent tasks per async worker), not load-test results.</p>
+{derivation_html}
+{graph_section}
 <div class="section">
 <div class="section-title">Full System Architecture — {component_count} Components</div>
-<div class="arch-wrap">{arch_html}</div>
+<p style="font-size:11px;color:var(--muted);margin:-4px 0 16px">Detection is pattern-based static analysis. Dashed boxes are dependencies declared in your manifest but not matched to a usage pattern in source — may be wired through a custom abstraction. Solid boxes are pattern-confirmed in source. A component not shown here isn't confirmed absent from the project — only undetected.</p>
+<div class="arch-wrap">{arch_html}<svg id="edge-overlay"></svg><script type="application/json" id="edges-data">{edges_json}</script></div>
+{f'<p style="font-size:11px;color:var(--muted);margin-top:10px">{len(edges)} edge{"s" if len(edges) != 1 else ""} shown — drawn only where a data-flow step names two rendered components consecutively; not a claim about every real connection.</p>' if edges else ''}
 {route_html}
 </div>
 
@@ -1118,13 +2057,408 @@ def render_html(analysis: dict, project_name: str) -> str:
 
 <footer>{project_name} · System Workflow · {component_count} components · {today} · workflow-generator</footer>
 </div>
+<script>{EDGE_JS}</script>
+<script>{GRAPH_JS}</script>
 </body>
 </html>"""
 
 
+# ── Codebase graph — every source file as a node, real imports/service calls
+# as edges. Complements the curated architecture summary above with the full
+# picture: nothing here is inferred, every edge is either a parsed import
+# statement or the same _RE pattern that already backs the component summary,
+# scanned per-file instead of repo-wide. ──────────────────────────────────────
+
+_GRAPH_EXTS = ('.py', '.js', '.jsx', '.ts', '.tsx', '.go', '.java', '.rs', '.rb')
+_GRAPH_FILE_CAP = 350
+_GRAPH_WARN_FILES = 800  # console heads-up when --graph-detail=files forces a very large render
+_GRAPH_MAX_BYTES = 1_500_000
+
+# name -> _RE key, used to attach a per-file edge to an already-detected
+# component (same signal detect_llm/detect_storage/etc. already surfaced —
+# this just localizes *which* files matched it).
+_LLM_RE_KEYS = {
+    'OpenAI': 'openai_chat', 'Anthropic': 'anthropic_chat', 'Cohere': 'cohere_chat',
+    'AWS Bedrock': 'bedrock_chat', 'Google Gemini': 'gemini_chat', 'Mistral': 'mistral_chat',
+    'Groq': 'groq_chat', 'Ollama': 'ollama_chat', 'LiteLLM (multi-provider)': 'litellm_call',
+}
+_STORAGE_RE_KEYS = {
+    'Qdrant': 'qdrant', 'Pinecone': 'pinecone', 'Weaviate': 'weaviate', 'ChromaDB': 'chromadb',
+    'pgvector': 'pgvector', 'FAISS': 'faiss', 'Milvus': 'milvus', 'PostgreSQL': 'postgres',
+    'MySQL': 'mysql', 'MongoDB': 'mongo', 'SQLite': 'sqlite', 'Redis': 'redis_cache',
+    'S3 / Object Store': 's3',
+}
+_QUEUE_RE_KEYS = {
+    'Celery': 'celery', 'BullMQ': 'bull', 'Kafka': 'kafka', 'RabbitMQ': 'rabbitmq',
+    'RQ (Redis Queue)': 'redis_queue', 'AWS SQS': 'sqs',
+}
+_EXTSRC_RE_KEYS = {
+    'Jira': 'jira', 'Azure DevOps': 'ado', 'Slack': 'slack', 'GitHub': 'github',
+    'Stripe': 'stripe', 'Salesforce': 'salesforce', 'Twilio': 'twilio',
+}
+_GRAPH_ENTRY_ID = 'entry:http'
+
+
+def _py_module_name(root: Path, p: Path) -> str:
+    rel = p.relative_to(root).with_suffix('')
+    parts = rel.parts
+    if parts and parts[-1] == '__init__':
+        parts = parts[:-1]
+    return '.'.join(parts)
+
+
+def _collect_graph_files(root: Path) -> list[Path]:
+    files = []
+    for p in root.rglob('*'):
+        if not p.is_file() or p.suffix not in _GRAPH_EXTS or _is_excluded(root, p):
+            continue
+        try:
+            if p.stat().st_size > _GRAPH_MAX_BYTES:
+                continue
+        except OSError:
+            continue
+        files.append(p)
+    return files
+
+
+def _resolve_js_spec(spec: str, from_file: Path, js_paths: set) -> Path | None:
+    if not spec.startswith('.'):
+        return None  # bare specifier (npm package) — external, not a repo edge
+    base = (from_file.parent / spec).resolve()
+    candidates = [base] + [base.with_suffix(ext) for ext in ('.ts', '.tsx', '.js', '.jsx')]
+    candidates += [base / f'index{ext}' for ext in ('.ts', '.tsx', '.js', '.jsx')]
+    for c in candidates:
+        if c in js_paths:
+            return c
+    return None
+
+
+def build_code_graph(root: Path, analysis: dict, detail: str = 'auto') -> dict:
+    """Full module-dependency graph: every source file is a node, every real
+    import is an edge, every file matching a detected component's own _RE
+    pattern gets an edge to that component. Best-effort only — anything that
+    can't be confidently resolved (dynamic imports, unusual layouts, Go
+    without a parseable go.mod) is silently skipped rather than guessed."""
+    files = _collect_graph_files(root)
+    total_files = len(files)
+    file_ids = {p: p.relative_to(root).as_posix() for p in files}
+    file_text: dict[Path, str] = {}
+    file_text_lower: dict[Path, str] = {}
+    for p in files:
+        try:
+            file_text[p] = p.read_text(encoding='utf-8', errors='ignore')
+        except OSError:
+            file_text[p] = ''
+        file_text_lower[p] = file_text[p].lower()
+
+    nodes: dict[str, dict] = {}
+    for p in files:
+        fid = file_ids[p]
+        pkg_parts = Path(fid).parts[:-1]
+        nodes[fid] = {
+            'id': fid, 'label': Path(fid).name,
+            'pkg': pkg_parts[0] if pkg_parts else '(root)',
+            'loc': file_text[p].count('\n') + 1 if file_text[p] else 0,
+            'kind': 'file',
+        }
+
+    edges: list[dict] = []
+    seen: set = set()
+
+    def add_edge(s, t, kind, w=None):
+        if not s or not t or s == t:
+            return
+        key = (s, t, kind)
+        if key in seen:
+            return
+        seen.add(key)
+        edge = {'s': s, 't': t, 'kind': kind}
+        if w is not None:
+            edge['w'] = w
+        edges.append(edge)
+
+    # --- Python: real AST-parsed imports, including relative imports ---
+    py_files = [p for p in files if p.suffix == '.py']
+    py_mod_map = {_py_module_name(root, p): p for p in py_files}
+    for p in py_files:
+        fid = file_ids[p]
+        try:
+            tree = ast.parse(file_text[p], filename=str(p))
+        except (SyntaxError, ValueError):
+            continue
+        dir_parts = Path(fid).parts[:-1]
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    target = py_mod_map.get(alias.name)
+                    if target is not None:
+                        add_edge(fid, file_ids[target], 'import')
+            elif isinstance(node, ast.ImportFrom):
+                if node.level:
+                    base = dir_parts[:len(dir_parts) - (node.level - 1)] if node.level > 1 else dir_parts
+                    if node.module:
+                        mod = '.'.join((*base, node.module))
+                        target = py_mod_map.get(mod)
+                        if target is not None:
+                            add_edge(fid, file_ids[target], 'import')
+                        else:
+                            for alias in node.names:
+                                t2 = py_mod_map.get('.'.join((*base, node.module, alias.name)))
+                                if t2 is not None:
+                                    add_edge(fid, file_ids[t2], 'import')
+                    else:
+                        for alias in node.names:
+                            target = py_mod_map.get('.'.join((*base, alias.name)))
+                            if target is not None:
+                                add_edge(fid, file_ids[target], 'import')
+                elif node.module:
+                    target = py_mod_map.get(node.module)
+                    if target is not None:
+                        add_edge(fid, file_ids[target], 'import')
+
+    # --- JS/TS: regex-extracted specifiers, relative ones only ---
+    js_files = [p for p in files if p.suffix in ('.js', '.jsx', '.ts', '.tsx')]
+    js_path_set = set(js_files)
+    js_import_re = re.compile(r'''(?:import\s+(?:[\w*{}\s,]+\s+from\s+)?|export\s+(?:[\w*{}\s,]+\s+from\s+)?|require\()\s*['"]([^'"]+)['"]''')
+    for p in js_files:
+        fid = file_ids[p]
+        for m in js_import_re.finditer(file_text[p]):
+            target = _resolve_js_spec(m.group(1), p, js_path_set)
+            if target is not None:
+                add_edge(fid, file_ids[target], 'import')
+
+    # --- Go: only when go.mod gives us a module prefix to resolve against ---
+    go_files = [p for p in files if p.suffix == '.go']
+    if go_files:
+        gomod = _read_file(root, 'go.mod')
+        m = re.search(r'^module\s+(\S+)', gomod, re.M)
+        if m:
+            mod_prefix = m.group(1)
+            dir_to_files: dict[str, list[Path]] = {}
+            for p in go_files:
+                dir_to_files.setdefault(Path(file_ids[p]).parent.as_posix(), []).append(p)
+            go_import_re = re.compile(r'"([^"]+)"')
+            for p in go_files:
+                fid = file_ids[p]
+                in_block = False
+                for line in file_text[p].splitlines():
+                    s = line.strip()
+                    if s.startswith('import ('):
+                        in_block = True
+                        continue
+                    if in_block and s == ')':
+                        in_block = False
+                        continue
+                    if in_block or s.startswith('import '):
+                        gm = go_import_re.search(s)
+                        if not gm:
+                            continue
+                        path = gm.group(1)
+                        if path == mod_prefix:
+                            rel_dir = ''
+                        elif path.startswith(mod_prefix + '/'):
+                            rel_dir = path[len(mod_prefix) + 1:]
+                        else:
+                            continue
+                        for target in dir_to_files.get(rel_dir, []):
+                            add_edge(fid, file_ids[target], 'import')
+
+    # --- Java: package declaration + class-name-from-filename gives an FQN
+    # map; only explicit `import` statements become edges (no same-package
+    # sibling guessing — Java doesn't require importing same-package
+    # classes, so we have no signal there and don't invent one). ---
+    java_files = [p for p in files if p.suffix == '.java']
+    if java_files:
+        java_pkg_re = re.compile(r'^\s*package\s+([\w.]+)\s*;', re.M)
+        java_import_re = re.compile(r'^\s*import\s+(?:static\s+)?([\w.]+)\s*;', re.M)
+        java_fqn_map: dict[str, Path] = {}
+        for p in java_files:
+            m = java_pkg_re.search(file_text[p])
+            pkg = m.group(1) if m else ''
+            class_name = p.stem
+            fqn = f'{pkg}.{class_name}' if pkg else class_name
+            java_fqn_map[fqn] = p
+        for p in java_files:
+            fid = file_ids[p]
+            for m in java_import_re.finditer(file_text[p]):
+                imported = m.group(1)
+                target = java_fqn_map.get(imported)
+                if target is None and imported.endswith('.*'):
+                    continue  # wildcard import — no single target file to point at
+                if target is not None:
+                    add_edge(fid, file_ids[target], 'import')
+
+    # --- Rust: `mod foo;` (sibling file/dir) and `use crate::a::b::Item`
+    # (resolved from the crate root, if Cargo.toml locates one). ---
+    rust_files = [p for p in files if p.suffix == '.rs']
+    if rust_files:
+        rust_path_set = set(rust_files)
+        mod_re = re.compile(r'^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+(\w+)\s*;', re.M)
+        use_re = re.compile(r'^\s*(?:pub\s+)?use\s+crate::([\w:]+)\s*;', re.M)
+        cargo_toml = next(root.rglob('Cargo.toml'), None)
+        src_root = cargo_toml.parent / 'src' if cargo_toml else None
+        for p in rust_files:
+            fid = file_ids[p]
+            for m in mod_re.finditer(file_text[p]):
+                name = m.group(1)
+                for cand in (p.parent / f'{name}.rs', p.parent / name / 'mod.rs'):
+                    if cand in rust_path_set:
+                        add_edge(fid, file_ids[cand], 'import')
+                        break
+            if src_root is not None:
+                for m in use_re.finditer(file_text[p]):
+                    segs = m.group(1).split('::')
+                    base = src_root.joinpath(*segs)
+                    candidates = [base.with_suffix('.rs'), base / 'mod.rs']
+                    if len(segs) > 1:
+                        base2 = src_root.joinpath(*segs[:-1])
+                        candidates += [base2.with_suffix('.rs'), base2 / 'mod.rs']
+                    for cand in candidates:
+                        if cand in rust_path_set:
+                            add_edge(fid, file_ids[cand], 'import')
+                            break
+
+    # --- Ruby: `require_relative` (resolved against the file's own dir) and
+    # `require` (probed against a conventional lib/ layout only — a bare
+    # `require 'json'` for a stdlib/gem is correctly left unresolved). ---
+    ruby_files = [p for p in files if p.suffix == '.rb']
+    if ruby_files:
+        ruby_path_set = set(ruby_files)
+        rel_re = re.compile(r'require_relative\s+[\'"]([^\'"]+)[\'"]')
+        req_re = re.compile(r'(?<!_)require\s+[\'"]([^\'"]+)[\'"]')
+        for p in ruby_files:
+            fid = file_ids[p]
+            for m in rel_re.finditer(file_text[p]):
+                # .resolve() to collapse any '../' before the set lookup —
+                # require_relative commonly reaches into a sibling directory.
+                cand = (p.parent / m.group(1)).resolve().with_suffix('.rb')
+                if cand in ruby_path_set:
+                    add_edge(fid, file_ids[cand], 'import')
+            for m in req_re.finditer(file_text[p]):
+                cand = root / 'lib' / (m.group(1) + '.rb')
+                if cand in ruby_path_set:
+                    add_edge(fid, file_ids[cand], 'import')
+
+    # --- Service edges: same _RE pattern that already backs the summary,
+    # scanned per-file so the graph shows *which* files actually call it. ---
+    def add_service_group(items, name_key, re_map, icon_fn):
+        for item in items:
+            name = item[name_key] if isinstance(item, dict) else item
+            re_key = re_map.get(name)
+            if not re_key:
+                continue
+            sid = f'svc:{name}'
+            matched = False
+            for p in files:
+                if _hinted_search(re_key, file_text[p], file_text_lower[p]):
+                    add_edge(file_ids[p], sid, 'service')
+                    matched = True
+            if matched:
+                color_key = item.get('color', 'gray') if isinstance(item, dict) else 'pink'
+                nodes[sid] = {
+                    'id': sid, 'label': name, 'pkg': '(service)', 'loc': 0,
+                    'kind': 'service', 'color': C.get(color_key, C['gray']),
+                    'icon': icon_fn(item),
+                }
+
+    add_service_group(analysis['llm'].get('providers', []), None, _LLM_RE_KEYS, lambda i: '🧠')
+    add_service_group(analysis['storage'], 'name', _STORAGE_RE_KEYS, lambda i: _STORE_ICONS.get(i['type'], '📦'))
+    add_service_group(analysis['queues'], 'name', _QUEUE_RE_KEYS, lambda i: '📨')
+    add_service_group([s for s in analysis['external_sources'] if s['name'] in _EXTSRC_RE_KEYS],
+                       'name', _EXTSRC_RE_KEYS, lambda i: '🌐')
+
+    # --- Entry node: HTTP clients -> every file with a route decorator.
+    # When an --access-log was supplied, weight each edge with the real
+    # request count observed for the routes that specific file declares
+    # (same route-string construction detect_api_server() uses — see
+    # _extract_route_strings — just applied per file). No log -> no weight,
+    # never a guessed one. ---
+    route_patterns = [_RE['fastapi_route'], _RE['flask_route'], _RE['django_path'], _RE['express_route']]
+    access_log = analysis.get('access_log')
+    framework = analysis.get('framework')
+    entry_used = False
+    for p in files:
+        text = file_text[p]
+        if any(pat.search(text) for pat in route_patterns):
+            w = None
+            if access_log:
+                file_routes = _extract_route_strings(text, framework)
+                observed = sum(access_log['by_route'].get(r, 0) for r in file_routes)
+                w = observed or None
+            add_edge(_GRAPH_ENTRY_ID, file_ids[p], 'entry', w=w)
+            entry_used = True
+    if entry_used:
+        nodes[_GRAPH_ENTRY_ID] = {
+            'id': _GRAPH_ENTRY_ID, 'label': 'HTTP Clients', 'pkg': '(entry)',
+            'loc': 0, 'kind': 'entry', 'color': C['green'], 'icon': '🌐',
+        }
+
+    file_node_count = sum(1 for n in nodes.values() if n['kind'] == 'file')
+    should_aggregate = (detail == 'dirs') or (detail == 'auto' and file_node_count > _GRAPH_FILE_CAP)
+    aggregated = False
+    if should_aggregate:
+        nodes, edges = _aggregate_graph_dirs(nodes, edges)
+        aggregated = True
+    elif detail == 'files' and file_node_count > _GRAPH_WARN_FILES:
+        print(f"Warning: --graph-detail=files forcing {file_node_count} file-level nodes — rendering may be sluggish.", file=sys.stderr)
+
+    return {
+        'nodes': list(nodes.values()),
+        'links': edges,
+        'meta': {
+            'files': total_files,
+            'links': len(edges),
+            'aggregated': aggregated,
+            'shown_nodes': len(nodes),
+            'has_access_log': bool(access_log),
+        },
+    }
+
+
+def _aggregate_graph_dirs(nodes: dict, edges: list, depth: int = 2) -> tuple[dict, list]:
+    """Collapse file nodes into directory nodes (service/entry nodes untouched)
+    when the file-level graph would be too dense to render usefully. Parallel
+    edges between the same pair are merged into one, weighted edge."""
+    def dir_id(fid: str) -> str:
+        parts = Path(fid).parts[:-1][:depth] or ('(root)',)
+        return 'dir:' + '/'.join(parts)
+
+    remap: dict[str, str] = {}
+    dir_nodes: dict[str, dict] = {}
+    other_nodes: dict[str, dict] = {}
+    for nid, n in nodes.items():
+        if n['kind'] != 'file':
+            other_nodes[nid] = n
+            continue
+        did = dir_id(nid)
+        remap[nid] = did
+        d = dir_nodes.setdefault(did, {'id': did, 'label': did.split(':', 1)[1], 'pkg': n['pkg'],
+                                        'loc': 0, 'kind': 'dir', 'file_count': 0})
+        d['loc'] += n['loc']
+        d['file_count'] += 1
+
+    merged: dict[tuple, dict] = {}
+    for e in edges:
+        s2, t2 = remap.get(e['s'], e['s']), remap.get(e['t'], e['t'])
+        if s2 == t2:
+            continue
+        key = (s2, t2, e['kind'])
+        # 'w' on a pre-aggregation edge is a real observed count (access-log
+        # weighted entry edges); absent 'w' just means "one edge" — sum
+        # either way so real request counts survive aggregation intact
+        # instead of being overwritten by a duplicate-count of 1.
+        w = e.get('w', 1)
+        if key in merged:
+            merged[key]['w'] += w
+        else:
+            merged[key] = {'s': s2, 't': t2, 'kind': e['kind'], 'w': w}
+
+    return {**dir_nodes, **other_nodes}, list(merged.values())
+
+
 # ── collect + main ─────────────────────────────────────────────────────────────
 
-def collect(root: Path) -> dict:
+def collect(root: Path, graph_detail: str = 'auto', access_log_path: str | None = None) -> dict:
     workers = detect_workers(root)
     gateway = detect_gateway(root)
     api_server = detect_api_server(root)
@@ -1146,6 +2480,11 @@ def collect(root: Path) -> dict:
         'queues': queues,
         'workers': workers,
     })
+    access_log = parse_access_log(access_log_path, api_server.get('routes', [])) if access_log_path else None
+    graph = build_code_graph(root, {
+        'llm': llm, 'storage': storage, 'queues': queues, 'external_sources': external_sources,
+        'framework': api_server.get('framework'), 'access_log': access_log,
+    }, detail=graph_detail)
     return {
         'workers': workers,
         'gateway': gateway,
@@ -1158,15 +2497,40 @@ def collect(root: Path) -> dict:
         'external_sources': external_sources,
         'capacity': capacity,
         'flows': flows,
+        'graph': graph,
+        'access_log': access_log,
     }
 
 
 def main():
-    root   = Path(sys.argv[1]) if len(sys.argv) > 1 else Path('.')
-    output = Path(sys.argv[2]) if len(sys.argv) > 2 else root / 'WORKFLOW.html'
+    # Manual flag parsing (no argparse dependency) so the existing positional
+    # usage — `analyze.py [dir] [out]` — keeps working unchanged.
+    argv = sys.argv[1:]
+    graph_detail = 'auto'
+    access_log_path = None
+    positional = []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in ('--graph-detail',) and i + 1 < len(argv):
+            graph_detail = argv[i + 1]; i += 2; continue
+        if a.startswith('--graph-detail='):
+            graph_detail = a.split('=', 1)[1]; i += 1; continue
+        if a in ('--access-log',) and i + 1 < len(argv):
+            access_log_path = argv[i + 1]; i += 2; continue
+        if a.startswith('--access-log='):
+            access_log_path = a.split('=', 1)[1]; i += 1; continue
+        positional.append(a); i += 1
+
+    if graph_detail not in ('auto', 'files', 'dirs'):
+        print(f"Warning: unknown --graph-detail={graph_detail!r} (expected auto|files|dirs) — using 'auto'.", file=sys.stderr)
+        graph_detail = 'auto'
+
+    root   = Path(positional[0]) if len(positional) > 0 else Path('.')
+    output = Path(positional[1]) if len(positional) > 1 else root / 'WORKFLOW.html'
 
     project_name = detect_project_name(root) or root.resolve().name.replace('-', ' ').replace('_', ' ').title()
-    analysis = collect(root)
+    analysis = collect(root, graph_detail=graph_detail, access_log_path=access_log_path)
 
     output.write_text(render_html(analysis, project_name))
 
@@ -1178,8 +2542,12 @@ def main():
         print(f"Gateway: {analysis['gateway']['type']} · {len(analysis['gateway']['rate_limits'])} rate limit zone(s)")
     if analysis['llm']['providers']:
         print(f"LLM: {', '.join(analysis['llm']['providers'])} · eval: {analysis['llm'].get('eval_framework') or 'none'}")
+    if analysis['llm'].get('providers_declared'):
+        print(f"LLM (declared dependency, unconfirmed usage): {', '.join(analysis['llm']['providers_declared'])}")
     print(f"Storage: {', '.join(s['name'] for s in analysis['storage'])}")
     print(f"External sources: {', '.join(s['name'] for s in analysis['external_sources'])}")
+    gm = analysis['graph']['meta']
+    print(f"Graph: {gm['files']} files · {gm['links']} import/service links{' (aggregated to ' + str(gm['shown_nodes']) + ' dir nodes)' if gm['aggregated'] else ''}")
 
 
 if __name__ == '__main__':
