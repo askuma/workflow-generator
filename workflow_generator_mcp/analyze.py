@@ -986,10 +986,18 @@ padding:24px;overflow-x:auto;position:relative}
 .graph-wrap{background:var(--bg3);border:1px solid var(--border);border-radius:14px;
 padding:16px;position:relative;height:640px}
 .graph-wrap canvas{width:100%;height:100%;display:block;border-radius:10px;cursor:grab}
-#graph-search{position:absolute;top:26px;left:26px;z-index:2;background:var(--bg2);
+.graph-toolbar{position:absolute;top:26px;left:26px;right:26px;z-index:2;display:flex;
+align-items:center;gap:10px;flex-wrap:wrap}
+#graph-search{background:var(--bg2);
 border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;
 color:var(--text);width:180px;font-family:var(--sans)}
 #graph-search:focus{outline:none;border-color:var(--border2)}
+#graph-hide-isolated-wrap{display:flex;align-items:center;gap:5px;font-size:11px;
+color:var(--muted);white-space:nowrap;cursor:pointer;user-select:none}
+#graph-isolated-count{color:var(--muted)}
+#graph-reset-view{background:var(--bg2);border:1px solid var(--border);border-radius:8px;
+padding:6px 10px;font-size:11px;color:var(--muted);font-family:var(--sans);cursor:pointer}
+#graph-reset-view:hover{color:var(--text);border-color:var(--border2)}
 .graph-legend{position:absolute;bottom:26px;left:26px;right:26px;z-index:2;display:flex;gap:14px 20px;
 flex-wrap:wrap;font-size:10.5px;color:var(--muted);background:rgba(0,0,0,.0)}
 .graph-legend span{display:flex;align-items:center;gap:5px}
@@ -1241,25 +1249,24 @@ GRAPH_JS = """
     return 'hsl(' + (h % 360) + ',62%,58%)';
   }
 
-  var nodes = data.nodes.map(function(n){
-    var h1 = hashStr(n.id), h2 = hashStr(n.id + ':r');
-    var angle = (h1 % 6283) / 1000;
-    var radius = 60 + (h2 % 260);
-    return Object.assign({}, n, {
-      x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, vx: 0, vy: 0, fixed: false,
-    });
-  });
-  var byId = {};
-  nodes.forEach(function(n){ byId[n.id] = n; });
-  var links = data.links.filter(function(l){ return byId[l.s] && byId[l.t]; }).map(function(l){
+  // Degree is computed once over the full graph (independent of the isolated-node
+  // toggle below) so hiding zero-degree nodes never changes an in/out count.
+  var byIdAll = {};
+  data.nodes.forEach(function(n){ byIdAll[n.id] = n; });
+  var allLinks = data.links.filter(function(l){ return byIdAll[l.s] && byIdAll[l.t]; }).map(function(l){
     return Object.assign({}, l, {phase: (hashStr(l.s + l.t) % 1000) / 1000});
   });
   var degree = {};
-  links.forEach(function(l){
+  allLinks.forEach(function(l){
     degree[l.s] = degree[l.s] || {in: 0, out: 0};
     degree[l.t] = degree[l.t] || {in: 0, out: 0};
     degree[l.s].out++;
     degree[l.t].in++;
+  });
+  var isolatedIds = {}, isolatedCount = 0;
+  data.nodes.forEach(function(n){
+    var d = degree[n.id];
+    if (!d || (d.in === 0 && d.out === 0)){ isolatedIds[n.id] = true; isolatedCount++; }
   });
 
   function nodeRadius(n){
@@ -1274,7 +1281,7 @@ GRAPH_JS = """
 
   // ── Force simulation: O(n^2) repulsion + spring edges + centering. n is
   // capped (file cap / directory aggregation upstream), so this stays cheap. ──
-  var alpha = 1;
+  var nodes, links, byId, alpha, view = {x: 0, y: 0, scale: 1};
   function tick(){
     var n = nodes.length;
     for (var i = 0; i < n; i++){
@@ -1313,12 +1320,11 @@ GRAPH_JS = """
     });
     alpha = Math.max(0.02, alpha * 0.985);
   }
-  for (var i = 0; i < 220; i++) tick(); // settle to a deterministic resting layout before first paint
 
-  // Fit the initial view to wherever the settled layout actually landed, rather
-  // than assuming it fits a {x:0,y:0,scale:1} viewport — the settled bounding
-  // box scales with node count and link topology, not a fixed canvas size.
-  var view = (function(){
+  // Fit the view to wherever the settled layout actually landed, rather than
+  // assuming it fits a {x:0,y:0,scale:1} viewport — the settled bounding box
+  // scales with node count and link topology, not a fixed canvas size.
+  function fitView(){
     var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     nodes.forEach(function(n){
       if (n.x < minX) minX = n.x; if (n.x > maxX) maxX = n.x;
@@ -1329,9 +1335,46 @@ GRAPH_JS = """
     var cw = r.width || 800, ch = r.height || 500;
     var scale = Math.min(1.4, Math.max(0.06, Math.min(cw / w, ch / h) * 0.85));
     var cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-    return {x: -cx * scale, y: -cy * scale, scale: scale};
-  })();
+    view = {x: -cx * scale, y: -cy * scale, scale: scale};
+  }
+
   var selected = null, hovered = null, searchMatch = null;
+
+  // Rebuilds the node/link set (optionally excluding zero-degree nodes), re-settles
+  // the force layout from fresh hashed starting positions, and re-fits the view —
+  // used both for the initial paint and whenever the "hide isolated" toggle changes.
+  function buildLayout(hideIsolated){
+    var visible = hideIsolated ? data.nodes.filter(function(n){ return !isolatedIds[n.id]; }) : data.nodes;
+    nodes = visible.map(function(n){
+      var h1 = hashStr(n.id), h2 = hashStr(n.id + ':r');
+      var angle = (h1 % 6283) / 1000;
+      var radius = 60 + (h2 % 260);
+      return Object.assign({}, n, {
+        x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, vx: 0, vy: 0, fixed: false,
+      });
+    });
+    byId = {};
+    nodes.forEach(function(n){ byId[n.id] = n; });
+    links = allLinks.filter(function(l){ return byId[l.s] && byId[l.t]; });
+    alpha = 1;
+    for (var i = 0; i < 220; i++) tick(); // settle to a deterministic resting layout before first paint
+    fitView();
+    selected = null; hovered = null; searchMatch = null;
+  }
+
+  var hideIsolatedEl = document.getElementById('graph-hide-isolated');
+  var isolatedCountEl = document.getElementById('graph-isolated-count');
+  var hideIsolatedWrapEl = document.getElementById('graph-hide-isolated-wrap');
+  if (isolatedCountEl) isolatedCountEl.textContent = isolatedCount ? ' (' + isolatedCount + ')' : '';
+  if (!isolatedCount && hideIsolatedWrapEl) hideIsolatedWrapEl.style.display = 'none';
+  if (hideIsolatedEl) hideIsolatedEl.checked = isolatedCount > 0;
+  buildLayout(hideIsolatedEl ? hideIsolatedEl.checked : false);
+  if (hideIsolatedEl) hideIsolatedEl.addEventListener('change', function(){
+    dragging = null; panStart = null; moved = false;
+    buildLayout(hideIsolatedEl.checked);
+  });
+  var resetViewEl = document.getElementById('graph-reset-view');
+  if (resetViewEl) resetViewEl.addEventListener('click', function(){ fitView(); });
 
   function worldToScreen(x, y){
     var r = canvas.getBoundingClientRect();
@@ -1452,7 +1495,10 @@ GRAPH_JS = """
     var mx = e.clientX - r.left, my = e.clientY - r.top;
     var before = screenToWorld(mx, my);
     var factor = Math.exp(-e.deltaY * 0.001);
-    view.scale = Math.max(0.25, Math.min(6, view.scale * factor));
+    // Floor matches fitView's floor (0.06) so wheel zoom-out can always reach back to,
+    // or past, the initial auto-fit scale — a stricter floor here would leave large
+    // graphs permanently more zoomed-in than their starting view with no way back.
+    view.scale = Math.max(0.05, Math.min(6, view.scale * factor));
     var after = worldToScreen(before[0], before[1]);
     view.x += mx - after[0]; view.y += my - after[1];
   }, {passive: false});
@@ -2013,7 +2059,11 @@ faster. Treat this number as a starting estimate, not a capacity guarantee.</div
 <div class="graph-wrap">
 <canvas id="code-graph"></canvas>
 <div id="graph-tooltip" class="graph-tooltip"></div>
+<div class="graph-toolbar">
 <input id="graph-search" placeholder="filter modules…">
+<label id="graph-hide-isolated-wrap"><input type="checkbox" id="graph-hide-isolated">hide isolated files<span id="graph-isolated-count"></span></label>
+<button id="graph-reset-view" type="button" title="Restore the default zoom and pan">reset view</button>
+</div>
 <div class="graph-legend">
 <span><span class="lg-dot" style="background:#22c55e"></span>entry (HTTP clients)</span>
 <span><span class="lg-dot" style="border-radius:2px"></span>module (colored by package)</span>
@@ -2141,10 +2191,52 @@ def _collect_graph_files(root: Path) -> list[Path]:
     return files
 
 
-def _resolve_js_spec(spec: str, from_file: Path, js_paths: set) -> Path | None:
-    if not spec.startswith('.'):
-        return None  # bare specifier (npm package) — external, not a repo edge
-    base = (from_file.parent / spec).resolve()
+def _load_ts_path_aliases(root: Path) -> list[tuple[str, Path]]:
+    """Reads compilerOptions.baseUrl/paths out of tsconfig.json / jsconfig.json
+    (lightly JSONC-tolerant: strips // comments and trailing commas) so `@/foo`
+    style aliases resolve to real files instead of being treated as an
+    unresolvable bare specifier — the same mistake as an unresolved npm import,
+    but for a path that's actually internal to the repo."""
+    aliases: list[tuple[str, Path]] = []
+    skip_dirs = {'node_modules', '.git', 'dist', 'build', '.next', '.venv', 'venv'}
+    for cfg_name in ('tsconfig.json', 'jsconfig.json'):
+        for cfg_path in root.rglob(cfg_name):
+            if any(part in skip_dirs for part in cfg_path.parts):
+                continue
+            try:
+                raw = cfg_path.read_text(encoding='utf-8', errors='ignore')
+                raw = re.sub(r'/\*.*?\*/', '', raw, flags=re.S)
+                raw = re.sub(r'//[^\n]*', '', raw)
+                raw = re.sub(r',(\s*[}\]])', r'\1', raw)
+                cfg = json.loads(raw)
+            except (OSError, json.JSONDecodeError):
+                continue
+            opts = cfg.get('compilerOptions', {}) if isinstance(cfg, dict) else {}
+            paths = opts.get('paths', {})
+            if not isinstance(paths, dict):
+                continue
+            cfg_root = (cfg_path.parent / opts.get('baseUrl', '.')).resolve()
+            for pattern, targets in paths.items():
+                if not isinstance(targets, list) or not targets:
+                    continue
+                prefix = pattern.split('*')[0]
+                target = str(targets[0]).split('*')[0]
+                aliases.append((prefix, (cfg_root / target).resolve()))
+    aliases.sort(key=lambda a: -len(a[0]))  # longest/most-specific prefix wins
+    return aliases
+
+
+def _resolve_js_spec(spec: str, from_file: Path, js_paths: set, alias_map: list[tuple[str, Path]] = ()) -> Path | None:
+    if spec.startswith('.'):
+        base = (from_file.parent / spec).resolve()
+    else:
+        base = None
+        for prefix, target_dir in alias_map:
+            if spec.startswith(prefix):
+                base = (target_dir / spec[len(prefix):]).resolve()
+                break
+        if base is None:
+            return None  # bare specifier (npm package) — external, not a repo edge
     candidates = [base] + [base.with_suffix(ext) for ext in ('.ts', '.tsx', '.js', '.jsx')]
     candidates += [base / f'index{ext}' for ext in ('.ts', '.tsx', '.js', '.jsx')]
     for c in candidates:
@@ -2200,6 +2292,20 @@ def build_code_graph(root: Path, analysis: dict, detail: str = 'auto') -> dict:
     # --- Python: real AST-parsed imports, including relative imports ---
     py_files = [p for p in files if p.suffix == '.py']
     py_mod_map = {_py_module_name(root, p): p for p in py_files}
+    # Absolute imports are written relative to whatever directory is actually on
+    # sys.path at runtime (e.g. `backend/`, `src/`), not the scanned repo root, so
+    # `from app.core.config import x` in backend/app/core/config.py never matches
+    # the root-relative name `backend.app.core.config` above. Add every dropped-
+    # leading-segment suffix as a fallback candidate, but only where it's still
+    # unambiguous (exactly one file could produce it) so we never guess a wrong edge.
+    _suffix_owners: dict[str, set] = {}
+    for p in py_files:
+        parts = _py_module_name(root, p).split('.')
+        for i in range(1, len(parts)):
+            _suffix_owners.setdefault('.'.join(parts[i:]), set()).add(p)
+    for suffix, owners in _suffix_owners.items():
+        if suffix and suffix not in py_mod_map and len(owners) == 1:
+            py_mod_map[suffix] = next(iter(owners))
     for p in py_files:
         fid = file_ids[p]
         try:
@@ -2236,14 +2342,15 @@ def build_code_graph(root: Path, analysis: dict, detail: str = 'auto') -> dict:
                     if target is not None:
                         add_edge(fid, file_ids[target], 'import')
 
-    # --- JS/TS: regex-extracted specifiers, relative ones only ---
+    # --- JS/TS: regex-extracted specifiers, relative ones plus tsconfig/jsconfig aliases ---
     js_files = [p for p in files if p.suffix in ('.js', '.jsx', '.ts', '.tsx')]
     js_path_set = set(js_files)
+    js_alias_map = _load_ts_path_aliases(root)
     js_import_re = re.compile(r'''(?:import\s+(?:[\w*{}\s,]+\s+from\s+)?|export\s+(?:[\w*{}\s,]+\s+from\s+)?|require\()\s*['"]([^'"]+)['"]''')
     for p in js_files:
         fid = file_ids[p]
         for m in js_import_re.finditer(file_text[p]):
-            target = _resolve_js_spec(m.group(1), p, js_path_set)
+            target = _resolve_js_spec(m.group(1), p, js_path_set, js_alias_map)
             if target is not None:
                 add_edge(fid, file_ids[target], 'import')
 
@@ -2479,6 +2586,12 @@ def _aggregate_graph_dirs(nodes: dict, edges: list, depth: int = 2) -> tuple[dic
 # ── collect + main ─────────────────────────────────────────────────────────────
 
 def collect(root: Path, graph_detail: str = 'auto', access_log_path: str | None = None) -> dict:
+    # Resolve once, up front: the graph builder compares Path objects for set
+    # membership (js_paths, byId), and an unresolved relative root (the default —
+    # `analyze.py .` is the most common invocation) makes every file path relative
+    # while resolved candidate paths downstream are absolute, so equality silently
+    # never matches and every JS/TS edge is dropped without error.
+    root = root.resolve()
     workers = detect_workers(root)
     gateway = detect_gateway(root)
     api_server = detect_api_server(root)
