@@ -9,10 +9,21 @@
 :root{--bg:#0f172a;--bg2:#111827;--bg3:#161e2e;--bg4:#1a2535;
 --border:#1e293b;--border2:#263347;--text:#f1f5f9;--muted:#64748b;--dim:#334155;
 --sans:'IBM Plex Sans',system-ui,sans-serif;--mono:'JetBrains Mono',monospace}
+:root[data-theme="light"]{--bg:#f8fafc;--bg2:#ffffff;--bg3:#ffffff;--bg4:#f1f5f9;
+--border:#e2e8f0;--border2:#cbd5e1;--text:#0f172a;--muted:#64748b;--dim:#94a3b8}
+:root[data-theme="light"] body{background-image:radial-gradient(circle,#cbd5e1 1.4px,transparent 1.4px);background-size:24px 24px}
+:root[data-theme="light"] h1{color:#0f172a}
+:root[data-theme="light"] code{color:#0891b2}
+:root[data-theme="light"] .arch-wrap{box-shadow:0 1px 3px rgba(15,23,42,.06)}
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.6}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.6;transition:background .25s,color .25s}
 .page{max-width:1440px;margin:0 auto;padding:40px 32px 80px}
 h1{font-size:28px;font-weight:700;color:#f8fafc;margin-bottom:4px}
+.theme-toggle{position:fixed;top:20px;right:24px;width:40px;height:40px;border-radius:50%;
+border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:17px;
+cursor:pointer;z-index:20;display:flex;align-items:center;justify-content:center;
+box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.theme-toggle:hover{border-color:var(--border2)}
 .subtitle{color:var(--muted);font-size:14px;margin-bottom:40px}
 .section{margin-bottom:56px}
 .section-title{font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
@@ -25,17 +36,66 @@ padding:20px 24px;flex:1;min-width:160px}
 .stat-card .sub{font-size:11px;color:var(--dim);margin-top:2px;font-family:var(--mono)}
 /* Architecture */
 .arch-wrap{background:var(--bg3);border:1px solid var(--border);border-radius:14px;
-padding:24px;overflow-x:auto}
+padding:24px;overflow-x:auto;position:relative}
+.graph-wrap{background:var(--bg3);border:1px solid var(--border);border-radius:14px;
+padding:16px;position:relative;height:640px}
+.graph-wrap canvas{width:100%;height:100%;display:block;border-radius:10px;cursor:grab}
+.graph-toolbar{position:absolute;top:26px;left:26px;right:26px;z-index:2;display:flex;
+align-items:center;gap:10px;flex-wrap:wrap}
+#graph-search{background:var(--bg2);
+border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;
+color:var(--text);width:180px;font-family:var(--sans)}
+#graph-search:focus{outline:none;border-color:var(--border2)}
+#graph-hide-isolated-wrap{display:flex;align-items:center;gap:5px;font-size:11px;
+color:var(--muted);white-space:nowrap;cursor:pointer;user-select:none}
+#graph-isolated-count{color:var(--muted)}
+#graph-reset-view{background:var(--bg2);border:1px solid var(--border);border-radius:8px;
+padding:6px 10px;font-size:11px;color:var(--muted);font-family:var(--sans);cursor:pointer}
+#graph-reset-view:hover{color:var(--text);border-color:var(--border2)}
+.graph-legend{position:absolute;bottom:26px;left:26px;right:26px;z-index:2;display:flex;gap:14px 20px;
+flex-wrap:wrap;font-size:10.5px;color:var(--muted);background:rgba(0,0,0,.0)}
+.graph-legend span{display:flex;align-items:center;gap:5px}
+.graph-legend .lg-dot{width:9px;height:9px;border-radius:50%;background:#818cf8;display:inline-block}
+.graph-legend .lg-square{width:9px;height:9px;background:#eab308;display:inline-block;border-radius:2px}
+.graph-legend .lg-ring{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--muted);display:inline-block}
+.graph-tooltip{position:absolute;z-index:3;pointer-events:none;background:var(--bg2);border:1px solid var(--border2);
+border-radius:8px;padding:8px 11px;font-size:11px;color:var(--text);box-shadow:0 4px 16px rgba(0,0,0,.25);
+display:none;max-width:320px;line-height:1.5}
+.graph-tooltip .tt-path{font-family:var(--mono);font-weight:600;word-break:break-all}
+.graph-tooltip .tt-meta{color:var(--muted);font-size:10.5px;margin-top:3px}
+.derivation{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px 18px;margin:0 0 12px}
+.derivation summary{cursor:pointer;font-size:12px;font-weight:600;color:var(--text);list-style:revert}
+.derivation .muted-inline{font-weight:400;color:var(--muted);font-size:11px}
+.derivation-body{margin-top:12px}
+.deriv-row{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11.5px;color:var(--muted);padding:3px 0}
+.deriv-row span:last-child{color:var(--text)}
+.deriv-divider{height:1px;background:var(--border);margin:10px 0}
+.deriv-label{font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px}
+.deriv-assumptions{font-size:11px;color:var(--muted);line-height:1.6}
 .arch-layer{margin-bottom:0}
 .arch-row-label{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
 color:#334155;margin-bottom:8px;padding-left:4px}
 .arch-boxes{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px}
-.arch-box{border:1.5px solid;border-radius:10px;padding:12px 16px;min-width:160px;flex:1;max-width:280px}
+.arch-box{border:1.5px solid;border-radius:10px;padding:12px 16px;min-width:160px;flex:1;max-width:280px;position:relative;color:#f1f5f9}
+.arch-box.declared{border-style:dashed;opacity:.72}
 .arch-box .bname{font-weight:700;font-size:13px;margin-bottom:2px}
+.arch-box .bicon{margin-right:6px;font-size:13px}
 .arch-box .bdesc{font-size:11px;opacity:.7;margin-bottom:4px}
 .arch-box .bcode{font-family:var(--mono);font-size:10px;opacity:.55;margin-top:2px}
-.arch-arrow{text-align:center;color:#2d3f55;font-size:20px;line-height:1;padding:4px 0;
-user-select:none}
+/* Nested storage groups */
+.arch-group{border:1.5px dashed var(--border2);border-radius:12px;padding:14px 10px 10px;
+display:flex;gap:12px;flex-wrap:wrap;position:relative;flex:1;min-width:200px}
+.arch-group-label{position:absolute;top:-9px;left:12px;background:var(--bg3);padding:0 8px;
+font-size:9px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+/* Edge overlay: real node-to-node connections evidenced by a flow's step sequence */
+#edge-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.edge-path{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.85}
+.edge-label{font-family:inherit;font-size:10px;font-weight:600;fill:var(--text);pointer-events:none}
+.edge-label-bg{fill:var(--bg2);stroke:var(--border);stroke-width:1;pointer-events:none}
+@media(prefers-reduced-motion:no-preference){
+.edge-path.animated{stroke-dasharray:8 6;animation:edgeFlow 1s linear infinite}
+}
+@keyframes edgeFlow{to{stroke-dashoffset:-28}}
 /* Flows */
 .flows{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px}
 .flow-card{background:var(--bg3);border:1px solid var(--border);border-radius:12px;overflow:hidden}
@@ -75,9 +135,37 @@ justify-content:space-between;align-items:center}
 footer{text-align:center;color:var(--dim);font-size:12px;margin-top:60px;
 padding-top:20px;border-top:1px solid var(--border)}
 code{font-family:var(--mono);font-size:11px;color:#06b6d4}
+/* Animated flow: architecture arrows */
+.arch-arrow{position:relative;height:26px}
+.arrow-line{position:absolute;left:50%;top:0;bottom:0;width:2px;background:var(--border2);transform:translateX(-50%)}
+.arrow-dot{position:absolute;left:50%;top:0;width:10px;height:10px;border-radius:50%;
+background:#60a5fa;box-shadow:0 0 8px 2px #60a5fa,0 0 18px 4px rgba(96,165,250,.55);transform:translateX(-50%);opacity:0}
+.arch-boxes{border-radius:14px;padding:6px;margin:-6px -6px 0 -6px}
+@media(prefers-reduced-motion:no-preference){
+.arrow-dot{animation:arrowFlow var(--t,4s) linear infinite;
+animation-delay:calc(var(--i,0)/var(--n,1)*var(--t,4s))}
+.arch-boxes{animation:rowPulse var(--t,4s) ease-in-out infinite;
+animation-delay:calc(var(--i,0)/var(--n,1)*var(--t,4s))}
+.step-num::after{animation:stepFlow var(--t,3s) linear infinite;
+animation-delay:calc(var(--i,0)/var(--n,1)*var(--t,3s))}
+}
+@keyframes arrowFlow{0%{opacity:0;top:0}5%{opacity:1}45%{top:calc(100% - 10px);opacity:1}62%{opacity:0}100%{opacity:0}}
+@keyframes rowPulse{0%,100%{background:transparent;box-shadow:none}
+4%{background:rgba(96,165,250,.12);box-shadow:0 0 0 1px rgba(96,165,250,.4)}
+22%{background:rgba(96,165,250,.12);box-shadow:0 0 0 1px rgba(96,165,250,.4)}
+34%{background:transparent;box-shadow:none}}
+/* Animated flow: step connectors */
+.step-num{position:relative}
+.step-num::before{content:'';position:absolute;left:50%;bottom:100%;width:2px;height:14px;
+background:var(--border2);transform:translateX(-50%)}
+.flow-step:first-child .step-num::before{display:none}
+.step-num::after{content:'';position:absolute;left:50%;top:-14px;width:5px;height:5px;
+border-radius:50%;background:currentColor;opacity:0;transform:translateX(-50%)}
+@keyframes stepFlow{0%{opacity:0;top:-14px}8%{opacity:1}92%{top:0;opacity:1}100%{opacity:0}}
 </style>
 </head>
 <body>
+<button id="theme-toggle" class="theme-toggle" aria-label="Toggle light/dark theme" title="Toggle theme">&#9728;&#65039;</button>
 <div class="page">
 <div style="margin-bottom:32px;padding:20px;background:var(--bg3);border:1px solid var(--border);border-radius:14px">
   <p style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:12px">
@@ -90,28 +178,93 @@ code{font-family:var(--mono);font-size:11px;color:#06b6d4}
   </p>
 </div>
 <h1>fastapi-full-stack-template — System Workflow</h1>
-<p class="subtitle">Component communication map · concurrent request capacity · bottleneck analysis · 2026-07-10</p>
+<p class="subtitle">Component communication map · concurrent request capacity · bottleneck analysis · 2026-07-23</p>
 
-<div class="stat-row"><div class="stat-card"><div class="val" style="color:#22c55e">1</div><div class="lbl">API Worker Processes</div><div class="sub">1 workers × 1 replica(s)</div></div><div class="stat-card"><div class="val" style="color:#3b82f6">~100</div><div class="lbl">Max Concurrent Async I/O</div><div class="sub">~100 per asyncio worker</div></div><div class="stat-card"><div class="val" style="color:#eab308">~100 concurrent I/O</div><div class="lbl">Practical Throughput</div><div class="sub">bottleneck: I/O event loop</div></div></div>
-<p style="font-size:11px;color:var(--muted);margin:-28px 0 40px">Capacity figures are static-analysis estimates (heuristic: ~100 concurrent tasks per async worker), not load-test results.</p>
+<div class="stat-row"><div class="stat-card"><div class="val" style="color:#22c55e">1</div><div class="lbl">API Worker Processes</div><div class="sub">1 workers × 1 replica(s)</div></div><div class="stat-card"><div class="val" style="color:#3b82f6">~100</div><div class="lbl">Max Concurrent Async I/O</div><div class="sub">~100 per asyncio worker</div></div><div class="stat-card"><div class="val" style="color:#eab308">~100 concurrent I/O</div><div class="lbl">Modeled Throughput</div><div class="sub">static model, not a load test — bottleneck: I/O event loop</div></div></div>
+<p style="font-size:11px;color:var(--muted);margin:-28px 0 20px">Capacity figures are static-analysis estimates (heuristic: ~100 concurrent tasks per async worker), not load-test results.</p>
+
+<details class="derivation">
+<summary>How was "Modeled Throughput" computed? <span class="muted-inline">(static model — click to expand)</span></summary>
+<div class="derivation-body">
+<div class="deriv-row"><span>Worker processes</span><span>1</span></div><div class="deriv-row"><span>Per-worker concurrency (assumed)</span><span>100 (async — ~100 concurrent tasks/worker is a heuristic, not measured)</span></div><div class="deriv-row"><span>1 workers × 100</span><span>= 100 concurrency ceiling</span></div>
+<div class="deriv-divider"></div>
+<div class="deriv-label">Ranked constraints (tightest wins — this is the bottleneck):</div>
+<div class="deriv-row"><span>1. I/O event loop</span><span>100 concurrent</span></div>
+<div class="deriv-divider"></div>
+<div class="deriv-assumptions">Assumptions baked into this model: ~100 concurrent tasks per async worker
+is a heuristic, not a measurement; an in-flight LLM call is modeled as occupying its slot for the full
+configured timeout (5000s), though real completions are usually
+faster. Treat this number as a starting estimate, not a capacity guarantee.</div>
+</div>
+</details>
+<details class="derivation">
+<summary>Verify with a real load test <span class="muted-inline">(generated k6 script — click to expand)</span></summary>
+<div class="derivation-body">
+<p style="margin:0 0 10px;font-size:11.5px;color:var(--muted)">Pre-filled with up to 5 detected routes. Run this against a staging deploy to replace the model above with a measurement.</p>
+<pre id="k6-script" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:11px;overflow-x:auto;margin:0 0 10px">import http from 'k6/http';
+import { sleep } from 'k6';
+
+// Generated by workflow-generator. Edit BASE_URL, add auth headers,
+// and replace any `1` path params with real IDs before running.
+// Run: k6 run --env BASE_URL=https://staging.example.com this_file.js
+const BASE_URL = __ENV.BASE_URL || 'http://localhost:8000';
+
+export const options = { vus: 10, duration: '30s' };
+
+export default function () {
+  http.get(`${BASE_URL}/`);
+  http.get(`${BASE_URL}/health-check/`);
+  http.get(`${BASE_URL}/me`);
+  http.get(`${BASE_URL}/1`);
+  http.get(`${BASE_URL}/1`);
+  sleep(1);
+}</pre>
+<button type="button" onclick="navigator.clipboard.writeText(document.getElementById('k6-script').textContent);this.textContent='Copied!';setTimeout(()=>this.textContent='Copy script',1500)" style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-size:11px;color:var(--text);cursor:pointer;font-family:var(--sans)">Copy script</button>
+</div>
+</details>
+
+
+<div class="section">
+<div class="section-title">Codebase Graph — 144 modules · 340 real connections</div>
+<p style="font-size:11px;color:var(--muted);margin:-4px 0 16px">Every node is a real file in this repo; every line is an actual import statement, or a pattern-confirmed service call scanned per-file (the same signal behind the summary below, localized to its source). This is <b>static analysis, not live monitoring</b> — particle motion shows dependency direction (importer → imported), not request traffic. Pass <code>--access-log &lt;path&gt;</code> to overlay real per-route request counts instead. Drag a node, scroll to zoom, click to isolate its connections, or search below.</p>
+<div class="graph-wrap">
+<canvas id="code-graph"></canvas>
+<div id="graph-tooltip" class="graph-tooltip"></div>
+<div class="graph-toolbar">
+<input id="graph-search" placeholder="filter modules…">
+<label id="graph-hide-isolated-wrap"><input type="checkbox" id="graph-hide-isolated">hide isolated files<span id="graph-isolated-count"></span></label>
+<button id="graph-reset-view" type="button" title="Restore the default zoom and pan">reset view</button>
+</div>
+<div class="graph-legend">
+<span><span class="lg-dot" style="background:#22c55e"></span>entry (HTTP clients)</span>
+<span><span class="lg-dot" style="border-radius:2px"></span>module (colored by package)</span>
+<span><span class="lg-square"></span>external service (pattern-confirmed)</span>
+<span>→ arrow = "imports / calls" (static — not live traffic)</span>
+<span><span class="lg-ring"></span><b style="color:var(--text)">click a node</b>&nbsp;to isolate its call paths (dims everything else); click empty space to clear, type in the search box to highlight by name</span>
+</div>
+</div>
+<script type="application/json" id="graph-data">{"nodes": [{"id": ".copier/update_dotenv.py", "label": "update_dotenv.py", "pkg": ".copier", "loc": 27, "kind": "file"}, {"id": "scripts/add_latest_release_date.py", "label": "add_latest_release_date.py", "pkg": "scripts", "loc": 41, "kind": "file"}, {"id": "frontend/vite.config.ts", "label": "vite.config.ts", "pkg": "frontend", "loc": 23, "kind": "file"}, {"id": "frontend/playwright.config.ts", "label": "playwright.config.ts", "pkg": "frontend", "loc": 92, "kind": "file"}, {"id": "frontend/openapi-ts.config.ts", "label": "openapi-ts.config.ts", "pkg": "frontend", "loc": 34, "kind": "file"}, {"id": "hooks/post_gen_project.py", "label": "post_gen_project.py", "pkg": "hooks", "loc": 9, "kind": "file"}, {"id": "frontend/src/vite-env.d.ts", "label": "vite-env.d.ts", "pkg": "frontend", "loc": 10, "kind": "file"}, {"id": "frontend/src/routeTree.gen.ts", "label": "routeTree.gen.ts", "pkg": "frontend", "loc": 236, "kind": "file"}, {"id": "frontend/src/main.tsx", "label": "main.tsx", "pkg": "frontend", "loc": 53, "kind": "file"}, {"id": "frontend/src/utils.ts", "label": "utils.ts", "pkg": "frontend", "loc": 32, "kind": "file"}, {"id": "frontend/tests/reset-password.spec.ts", "label": "reset-password.spec.ts", "pkg": "frontend", "loc": 126, "kind": "file"}, {"id": "frontend/tests/login.spec.ts", "label": "login.spec.ts", "pkg": "frontend", "loc": 118, "kind": "file"}, {"id": "frontend/tests/config.ts", "label": "config.ts", "pkg": "frontend", "loc": 20, "kind": "file"}, {"id": "frontend/tests/admin.spec.ts", "label": "admin.spec.ts", "pkg": "frontend", "loc": 206, "kind": "file"}, {"id": "frontend/tests/user-settings.spec.ts", "label": "user-settings.spec.ts", "pkg": "frontend", "loc": 257, "kind": "file"}, {"id": "frontend/tests/sign-up.spec.ts", "label": "sign-up.spec.ts", "pkg": "frontend", "loc": 160, "kind": "file"}, {"id": "frontend/tests/auth.setup.ts", "label": "auth.setup.ts", "pkg": "frontend", "loc": 14, "kind": "file"}, {"id": "frontend/tests/items.spec.ts", "label": "items.spec.ts", "pkg": "frontend", "loc": 133, "kind": "file"}, {"id": "frontend/src/routes/recover-password.tsx", "label": "recover-password.tsx", "pkg": "frontend", "loc": 131, "kind": "file"}, {"id": "frontend/src/routes/login.tsx", "label": "login.tsx", "pkg": "frontend", "loc": 143, "kind": "file"}, {"id": "frontend/src/routes/signup.tsx", "label": "signup.tsx", "pkg": "frontend", "loc": 188, "kind": "file"}, {"id": "frontend/src/routes/reset-password.tsx", "label": "reset-password.tsx", "pkg": "frontend", "loc": 167, "kind": "file"}, {"id": "frontend/src/routes/__root.tsx", "label": "__root.tsx", "pkg": "frontend", "loc": 19, "kind": "file"}, {"id": "frontend/src/routes/_layout.tsx", "label": "_layout.tsx", "pkg": "frontend", "loc": 41, "kind": "file"}, {"id": "frontend/src/components/theme-provider.tsx", "label": "theme-provider.tsx", "pkg": "frontend", "loc": 116, "kind": "file"}, {"id": "frontend/src/client/sdk.gen.ts", "label": "sdk.gen.ts", "pkg": "frontend", "loc": 468, "kind": "file"}, {"id": "frontend/src/client/index.ts", "label": "index.ts", "pkg": "frontend", "loc": 6, "kind": "file"}, {"id": "frontend/src/client/schemas.gen.ts", "label": "schemas.gen.ts", "pkg": "frontend", "loc": 571, "kind": "file"}, {"id": "frontend/src/client/types.gen.ts", "label": "types.gen.ts", "pkg": "frontend", "loc": 240, "kind": "file"}, {"id": "frontend/src/hooks/useCustomToast.ts", "label": "useCustomToast.ts", "pkg": "frontend", "loc": 20, "kind": "file"}, {"id": "frontend/src/hooks/useCopyToClipboard.ts", "label": "useCopyToClipboard.ts", "pkg": "frontend", "loc": 33, "kind": "file"}, {"id": "frontend/src/hooks/useAuth.ts", "label": "useAuth.ts", "pkg": "frontend", "loc": 71, "kind": "file"}, {"id": "frontend/src/hooks/useMobile.ts", "label": "useMobile.ts", "pkg": "frontend", "loc": 20, "kind": "file"}, {"id": "frontend/src/lib/utils.ts", "label": "utils.ts", "pkg": "frontend", "loc": 7, "kind": "file"}, {"id": "frontend/src/routes/_layout/admin.tsx", "label": "admin.tsx", "pkg": "frontend", "loc": 74, "kind": "file"}, {"id": "frontend/src/routes/_layout/items.tsx", "label": "items.tsx", "pkg": "frontend", "loc": 70, "kind": "file"}, {"id": "frontend/src/routes/_layout/settings.tsx", "label": "settings.tsx", "pkg": "frontend", "loc": 62, "kind": "file"}, {"id": "frontend/src/routes/_layout/index.tsx", "label": "index.tsx", "pkg": "frontend", "loc": 32, "kind": "file"}, {"id": "frontend/src/components/Sidebar/AppSidebar.tsx", "label": "AppSidebar.tsx", "pkg": "frontend", "loc": 44, "kind": "file"}, {"id": "frontend/src/components/Sidebar/Main.tsx", "label": "Main.tsx", "pkg": "frontend", "loc": 61, "kind": "file"}, {"id": "frontend/src/components/Sidebar/User.tsx", "label": "User.tsx", "pkg": "frontend", "loc": 98, "kind": "file"}, {"id": "frontend/src/components/Items/DeleteItem.tsx", "label": "DeleteItem.tsx", "pkg": "frontend", "loc": 95, "kind": "file"}, {"id": "frontend/src/components/Items/ItemActionsMenu.tsx", "label": "ItemActionsMenu.tsx", "pkg": "frontend", "loc": 35, "kind": "file"}, {"id": "frontend/src/components/Items/columns.tsx", "label": "columns.tsx", "pkg": "frontend", "loc": 74, "kind": "file"}, {"id": "frontend/src/components/Items/EditItem.tsx", "label": "EditItem.tsx", "pkg": "frontend", "loc": 146, "kind": "file"}, {"id": "frontend/src/components/Items/AddItem.tsx", "label": "AddItem.tsx", "pkg": "frontend", "loc": 145, "kind": "file"}, {"id": "frontend/src/components/UserSettings/DeleteAccount.tsx", "label": "DeleteAccount.tsx", "pkg": "frontend", "loc": 16, "kind": "file"}, {"id": "frontend/src/components/UserSettings/DeleteConfirmation.tsx", "label": "DeleteConfirmation.tsx", "pkg": "frontend", "loc": 83, "kind": "file"}, {"id": "frontend/src/components/UserSettings/UserInformation.tsx", "label": "UserInformation.tsx", "pkg": "frontend", "loc": 172, "kind": "file"}, {"id": "frontend/src/components/UserSettings/ChangePassword.tsx", "label": "ChangePassword.tsx", "pkg": "frontend", "loc": 147, "kind": "file"}, {"id": "frontend/src/components/ui/avatar.tsx", "label": "avatar.tsx", "pkg": "frontend", "loc": 52, "kind": "file"}, {"id": "frontend/src/components/ui/badge.tsx", "label": "badge.tsx", "pkg": "frontend", "loc": 47, "kind": "file"}, {"id": "frontend/src/components/ui/card.tsx", "label": "card.tsx", "pkg": "frontend", "loc": 93, "kind": "file"}, {"id": "frontend/src/components/ui/skeleton.tsx", "label": "skeleton.tsx", "pkg": "frontend", "loc": 14, "kind": "file"}, {"id": "frontend/src/components/ui/dialog.tsx", "label": "dialog.tsx", "pkg": "frontend", "loc": 142, "kind": "file"}, {"id": "frontend/src/components/ui/sidebar.tsx", "label": "sidebar.tsx", "pkg": "frontend", "loc": 738, "kind": "file"}, {"id": "frontend/src/components/ui/separator.tsx", "label": "separator.tsx", "pkg": "frontend", "loc": 27, "kind": "file"}, {"id": "frontend/src/components/ui/label.tsx", "label": "label.tsx", "pkg": "frontend", "loc": 25, "kind": "file"}, {"id": "frontend/src/components/ui/password-input.tsx", "label": "password-input.tsx", "pkg": "frontend", "loc": 52, "kind": "file"}, {"id": "frontend/src/components/ui/pagination.tsx", "label": "pagination.tsx", "pkg": "frontend", "loc": 128, "kind": "file"}, {"id": "frontend/src/components/ui/sonner.tsx", "label": "sonner.tsx", "pkg": "frontend", "loc": 41, "kind": "file"}, {"id": "frontend/src/components/ui/checkbox.tsx", "label": "checkbox.tsx", "pkg": "frontend", "loc": 31, "kind": "file"}, {"id": "frontend/src/components/ui/button-group.tsx", "label": "button-group.tsx", "pkg": "frontend", "loc": 84, "kind": "file"}, {"id": "frontend/src/components/ui/tabs.tsx", "label": "tabs.tsx", "pkg": "frontend", "loc": 65, "kind": "file"}, {"id": "frontend/src/components/ui/button.tsx", "label": "button.tsx", "pkg": "frontend", "loc": 61, "kind": "file"}, {"id": "frontend/src/components/ui/dropdown-menu.tsx", "label": "dropdown-menu.tsx", "pkg": "frontend", "loc": 258, "kind": "file"}, {"id": "frontend/src/components/ui/form.tsx", "label": "form.tsx", "pkg": "frontend", "loc": 166, "kind": "file"}, {"id": "frontend/src/components/ui/select.tsx", "label": "select.tsx", "pkg": "frontend", "loc": 186, "kind": "file"}, {"id": "frontend/src/components/ui/alert.tsx", "label": "alert.tsx", "pkg": "frontend", "loc": 67, "kind": "file"}, {"id": "frontend/src/components/ui/tooltip.tsx", "label": "tooltip.tsx", "pkg": "frontend", "loc": 60, "kind": "file"}, {"id": "frontend/src/components/ui/input.tsx", "label": "input.tsx", "pkg": "frontend", "loc": 22, "kind": "file"}, {"id": "frontend/src/components/ui/sheet.tsx", "label": "sheet.tsx", "pkg": "frontend", "loc": 140, "kind": "file"}, {"id": "frontend/src/components/ui/table.tsx", "label": "table.tsx", "pkg": "frontend", "loc": 115, "kind": "file"}, {"id": "frontend/src/components/ui/loading-button.tsx", "label": "loading-button.tsx", "pkg": "frontend", "loc": 68, "kind": "file"}, {"id": "frontend/src/components/Pending/PendingItems.tsx", "label": "PendingItems.tsx", "pkg": "frontend", "loc": 47, "kind": "file"}, {"id": "frontend/src/components/Pending/PendingUsers.tsx", "label": "PendingUsers.tsx", "pkg": "frontend", "loc": 54, "kind": "file"}, {"id": "frontend/src/components/Admin/UserActionsMenu.tsx", "label": "UserActionsMenu.tsx", "pkg": "frontend", "loc": 41, "kind": "file"}, {"id": "frontend/src/components/Admin/AddUser.tsx", "label": "AddUser.tsx", "pkg": "frontend", "loc": 239, "kind": "file"}, {"id": "frontend/src/components/Admin/DeleteUser.tsx", "label": "DeleteUser.tsx", "pkg": "frontend", "loc": 96, "kind": "file"}, {"id": "frontend/src/components/Admin/columns.tsx", "label": "columns.tsx", "pkg": "frontend", "loc": 77, "kind": "file"}, {"id": "frontend/src/components/Admin/EditUser.tsx", "label": "EditUser.tsx", "pkg": "frontend", "loc": 240, "kind": "file"}, {"id": "frontend/src/components/Common/ErrorComponent.tsx", "label": "ErrorComponent.tsx", "pkg": "frontend", "loc": 30, "kind": "file"}, {"id": "frontend/src/components/Common/Logo.tsx", "label": "Logo.tsx", "pkg": "frontend", "loc": 61, "kind": "file"}, {"id": "frontend/src/components/Common/DataTable.tsx", "label": "DataTable.tsx", "pkg": "frontend", "loc": 195, "kind": "file"}, {"id": "frontend/src/components/Common/NotFound.tsx", "label": "NotFound.tsx", "pkg": "frontend", "loc": 32, "kind": "file"}, {"id": "frontend/src/components/Common/AuthLayout.tsx", "label": "AuthLayout.tsx", "pkg": "frontend", "loc": 27, "kind": "file"}, {"id": "frontend/src/components/Common/Footer.tsx", "label": "Footer.tsx", "pkg": "frontend", "loc": 45, "kind": "file"}, {"id": "frontend/src/components/Common/Appearance.tsx", "label": "Appearance.tsx", "pkg": "frontend", "loc": 106, "kind": "file"}, {"id": "frontend/src/client/core/ApiError.ts", "label": "ApiError.ts", "pkg": "frontend", "loc": 21, "kind": "file"}, {"id": "frontend/src/client/core/OpenAPI.ts", "label": "OpenAPI.ts", "pkg": "frontend", "loc": 57, "kind": "file"}, {"id": "frontend/src/client/core/CancelablePromise.ts", "label": "CancelablePromise.ts", "pkg": "frontend", "loc": 126, "kind": "file"}, {"id": "frontend/src/client/core/ApiResult.ts", "label": "ApiResult.ts", "pkg": "frontend", "loc": 7, "kind": "file"}, {"id": "frontend/src/client/core/request.ts", "label": "request.ts", "pkg": "frontend", "loc": 347, "kind": "file"}, {"id": "frontend/src/client/core/ApiRequestOptions.ts", "label": "ApiRequestOptions.ts", "pkg": "frontend", "loc": 21, "kind": "file"}, {"id": "frontend/tests/utils/random.ts", "label": "random.ts", "pkg": "frontend", "loc": 20, "kind": "file"}, {"id": "frontend/tests/utils/user.ts", "label": "user.ts", "pkg": "frontend", "loc": 36, "kind": "file"}, {"id": "frontend/tests/utils/mailcatcher.ts", "label": "mailcatcher.ts", "pkg": "frontend", "loc": 63, "kind": "file"}, {"id": "frontend/tests/utils/privateApi.ts", "label": "privateApi.ts", "pkg": "frontend", "loc": 23, "kind": "file"}, {"id": "backend/app/backend_pre_start.py", "label": "backend_pre_start.py", "pkg": "backend", "loc": 40, "kind": "file"}, {"id": "backend/app/utils.py", "label": "utils.py", "pkg": "backend", "loc": 125, "kind": "file"}, {"id": "backend/app/crud.py", "label": "crud.py", "pkg": "backend", "loc": 69, "kind": "file"}, {"id": "backend/app/__init__.py", "label": "__init__.py", "pkg": "backend", "loc": 0, "kind": "file"}, {"id": "backend/app/initial_data.py", "label": "initial_data.py", "pkg": "backend", "loc": 24, "kind": "file"}, {"id": "backend/app/main.py", "label": "main.py", "pkg": "backend", "loc": 34, "kind": "file"}, {"id": "backend/app/tests_pre_start.py", "label": "tests_pre_start.py", "pkg": "backend", "loc": 40, "kind": "file"}, {"id": "backend/app/models.py", "label": "models.py", "pkg": "backend", "loc": 134, "kind": "file"}, {"id": "backend/tests/__init__.py", "label": "__init__.py", "pkg": "backend", "loc": 0, "kind": "file"}, {"id": "backend/tests/conftest.py", "label": "conftest.py", "pkg": "backend", "loc": 43, "kind": "file"}, {"id": "backend/app/alembic/env.py", "label": "env.py", "pkg": "backend", "loc": 87, "kind": "file"}, {"id": "backend/app/core/security.py", "label": "security.py", "pkg": "backend", "loc": 37, "kind": "file"}, {"id": "backend/app/core/config.py", "label": "config.py", "pkg": "backend", "loc": 119, "kind": "file"}, {"id": "backend/app/core/__init__.py", "label": "__init__.py", "pkg": "backend", "loc": 0, "kind": "file"}, {"id": "backend/app/core/db.py", "label": "db.py", "pkg": "backend", "loc": 34, "kind": "file"}, {"id": "backend/app/api/__init__.py", "label": "__init__.py", "pkg": "backend", "loc": 0, "kind": "file"}, {"id": "backend/app/api/main.py", "label": "main.py", "pkg": "backend", "loc": 15, "kind": "file"}, {"id": "backend/app/api/deps.py", "label": "deps.py", "pkg": "backend", "loc": 58, "kind": "file"}, {"id": "backend/app/alembic/versions/e2412789c190_initialize_models.py", "label": "e2412789c190_initialize_models.py", "pkg": "backend", "loc": 55, "kind": "file"}, {"id": "backend/app/alembic/versions/1a31ce608336_add_cascade_delete_relationships.py", "label": "1a31ce608336_add_cascade_delete_relationships.py", "pkg": "backend", "loc": 38, "kind": "file"}, {"id": "backend/app/alembic/versions/fe56fa70289e_add_created_at_to_user_and_item.py", "label": "fe56fa70289e_add_created_at_to_user_and_item.py", "pkg": "backend", "loc": 32, "kind": "file"}, {"id": "backend/app/alembic/versions/d98dd8ec85a3_edit_replace_id_integers_in_all_models_.py", "label": "d98dd8ec85a3_edit_replace_id_integers_in_all_models_.py", "pkg": "backend", "loc": 91, "kind": "file"}, {"id": "backend/app/alembic/versions/9c0a54914c78_add_max_length_for_string_varchar_.py", "label": "9c0a54914c78_add_max_length_for_string_varchar_.py", "pkg": "backend", "loc": 70, "kind": "file"}, {"id": "backend/app/api/routes/utils.py", "label": "utils.py", "pkg": "backend", "loc": 32, "kind": "file"}, {"id": "backend/app/api/routes/login.py", "label": "login.py", "pkg": "backend", "loc": 124, "kind": "file"}, {"id": "backend/app/api/routes/private.py", "label": "private.py", "pkg": "backend", "loc": 39, "kind": "file"}, {"id": "backend/app/api/routes/__init__.py", "label": "__init__.py", "pkg": "backend", "loc": 0, "kind": "file"}, {"id": "backend/app/api/routes/users.py", "label": "users.py", "pkg": "backend", "loc": 233, "kind": "file"}, {"id": "backend/app/api/routes/items.py", "label": "items.py", "pkg": "backend", "loc": 114, "kind": "file"}, {"id": "backend/tests/crud/__init__.py", "label": "__init__.py", "pkg": "backend", "loc": 0, "kind": "file"}, {"id": "backend/tests/crud/test_user.py", "label": "test_user.py", "pkg": "backend", "loc": 131, "kind": "file"}, {"id": "backend/tests/scripts/__init__.py", "label": "__init__.py", "pkg": "backend", "loc": 0, "kind": "file"}, {"id": "backend/tests/scripts/test_test_pre_start.py", "label": "test_test_pre_start.py", "pkg": "backend", "loc": 34, "kind": "file"}, {"id": "backend/tests/scripts/test_backend_pre_start.py", "label": "test_backend_pre_start.py", "pkg": "backend", "loc": 34, "kind": "file"}, {"id": "backend/tests/api/__init__.py", "label": "__init__.py", "pkg": "backend", "loc": 0, "kind": "file"}, {"id": "backend/tests/utils/utils.py", "label": "utils.py", "pkg": "backend", "loc": 27, "kind": "file"}, {"id": "backend/tests/utils/item.py", "label": "item.py", "pkg": "backend", "loc": 17, "kind": "file"}, {"id": "backend/tests/utils/user.py", "label": "user.py", "pkg": "backend", "loc": 50, "kind": "file"}, {"id": "backend/tests/utils/__init__.py", "label": "__init__.py", "pkg": "backend", "loc": 0, "kind": "file"}, {"id": "backend/tests/api/routes/test_users.py", "label": "test_users.py", "pkg": "backend", "loc": 522, "kind": "file"}, {"id": "backend/tests/api/routes/test_login.py", "label": "test_login.py", "pkg": "backend", "loc": 192, "kind": "file"}, {"id": "backend/tests/api/routes/test_items.py", "label": "test_items.py", "pkg": "backend", "loc": 165, "kind": "file"}, {"id": "backend/tests/api/routes/__init__.py", "label": "__init__.py", "pkg": "backend", "loc": 0, "kind": "file"}, {"id": "backend/tests/api/routes/test_private.py", "label": "test_private.py", "pkg": "backend", "loc": 27, "kind": "file"}, {"id": "svc:PostgreSQL", "label": "PostgreSQL", "pkg": "(service)", "loc": 0, "kind": "service", "color": "#3b82f6", "icon": "\ud83d\uddc4\ufe0f"}, {"id": "entry:http", "label": "HTTP Clients", "pkg": "(entry)", "loc": 0, "kind": "entry", "color": "#22c55e", "icon": "\ud83c\udf10"}], "links": [{"s": "backend/app/backend_pre_start.py", "t": "backend/app/core/db.py", "kind": "import"}, {"s": "backend/app/utils.py", "t": "backend/app/core/__init__.py", "kind": "import"}, {"s": "backend/app/utils.py", "t": "backend/app/core/config.py", "kind": "import"}, {"s": "backend/app/crud.py", "t": "backend/app/core/security.py", "kind": "import"}, {"s": "backend/app/crud.py", "t": "backend/app/models.py", "kind": "import"}, {"s": "backend/app/initial_data.py", "t": "backend/app/core/db.py", "kind": "import"}, {"s": "backend/app/main.py", "t": "backend/app/api/main.py", "kind": "import"}, {"s": "backend/app/main.py", "t": "backend/app/core/config.py", "kind": "import"}, {"s": "backend/app/tests_pre_start.py", "t": "backend/app/core/db.py", "kind": "import"}, {"s": "backend/tests/conftest.py", "t": "backend/app/core/config.py", "kind": "import"}, {"s": "backend/tests/conftest.py", "t": "backend/app/core/db.py", "kind": "import"}, {"s": "backend/tests/conftest.py", "t": "backend/app/main.py", "kind": "import"}, {"s": "backend/tests/conftest.py", "t": "backend/app/models.py", "kind": "import"}, {"s": "backend/tests/conftest.py", "t": "backend/tests/utils/user.py", "kind": "import"}, {"s": "backend/tests/conftest.py", "t": "backend/tests/utils/utils.py", "kind": "import"}, {"s": "backend/app/alembic/env.py", "t": "backend/app/models.py", "kind": "import"}, {"s": "backend/app/alembic/env.py", "t": "backend/app/core/config.py", "kind": "import"}, {"s": "backend/app/core/security.py", "t": "backend/app/core/config.py", "kind": "import"}, {"s": "backend/app/core/db.py", "t": "backend/app/__init__.py", "kind": "import"}, {"s": "backend/app/core/db.py", "t": "backend/app/core/config.py", "kind": "import"}, {"s": "backend/app/core/db.py", "t": "backend/app/models.py", "kind": "import"}, {"s": "backend/app/api/main.py", "t": "backend/app/api/routes/__init__.py", "kind": "import"}, {"s": "backend/app/api/main.py", "t": "backend/app/core/config.py", "kind": "import"}, {"s": "backend/app/api/routes/utils.py", "t": "backend/app/api/deps.py", "kind": "import"}, {"s": "backend/app/api/routes/utils.py", "t": "backend/app/models.py", "kind": "import"}, {"s": "backend/app/api/routes/utils.py", "t": "backend/app/utils.py", "kind": "import"}, {"s": "backend/app/api/routes/login.py", "t": "backend/app/__init__.py", "kind": "import"}, {"s": "backend/app/api/routes/login.py", "t": "backend/app/api/deps.py", "kind": "import"}, {"s": "backend/app/api/routes/login.py", "t": "backend/app/core/__init__.py", "kind": "import"}, {"s": "backend/app/api/routes/login.py", "t": "backend/app/core/config.py", "kind": "import"}, {"s": "backend/app/api/routes/login.py", "t": "backend/app/models.py", "kind": "import"}, {"s": "backend/app/api/routes/login.py", "t": "backend/app/utils.py", "kind": "import"}, {"s": "backend/app/api/routes/private.py", "t": "backend/app/api/deps.py", "kind": "import"}, {"s": "backend/app/api/routes/private.py", "t": "backend/app/core/security.py", "kind": "import"}, {"s": "backend/app/api/routes/private.py", "t": "backend/app/models.py", "kind": "import"}, {"s": "backend/app/api/routes/users.py", "t": "backend/app/__init__.py", "kind": "import"}, {"s": "backend/app/api/routes/users.py", "t": "backend/app/api/deps.py", "kind": "import"}, {"s": "backend/app/api/routes/users.py", "t": "backend/app/core/config.py", "kind": "import"}, {"s": "backend/app/api/routes/users.py", "t": "backend/app/core/security.py", "kind": "import"}, {"s": "backend/app/api/routes/users.py", "t": "backend/app/models.py", "kind": "import"}, {"s": "backend/app/api/routes/users.py", "t": "backend/app/utils.py", "kind": "import"}, {"s": "backend/app/api/routes/items.py", "t": "backend/app/api/deps.py", "kind": "import"}, {"s": "backend/app/api/routes/items.py", "t": "backend/app/models.py", "kind": "import"}, {"s": "backend/tests/crud/test_user.py", "t": "backend/app/__init__.py", "kind": "import"}, {"s": "backend/tests/crud/test_user.py", "t": "backend/app/core/security.py", "kind": "import"}, {"s": "backend/tests/crud/test_user.py", "t": "backend/app/models.py", "kind": "import"}, {"s": "backend/tests/crud/test_user.py", "t": "backend/tests/utils/utils.py", "kind": "import"}, {"s": "backend/tests/scripts/test_test_pre_start.py", "t": "backend/app/tests_pre_start.py", "kind": "import"}, {"s": "backend/tests/scripts/test_backend_pre_start.py", "t": "backend/app/backend_pre_start.py", "kind": "import"}, {"s": "backend/tests/utils/utils.py", "t": "backend/app/core/config.py", "kind": "import"}, {"s": "backend/tests/utils/item.py", "t": "backend/app/__init__.py", "kind": "import"}, {"s": "backend/tests/utils/item.py", "t": "backend/app/models.py", "kind": "import"}, {"s": "backend/tests/utils/item.py", "t": "backend/tests/utils/user.py", "kind": "import"}, {"s": "backend/tests/utils/item.py", "t": "backend/tests/utils/utils.py", "kind": "import"}, {"s": "backend/tests/utils/user.py", "t": "backend/app/__init__.py", "kind": "import"}, {"s": "backend/tests/utils/user.py", "t": "backend/app/core/config.py", "kind": "import"}, {"s": "backend/tests/utils/user.py", "t": "backend/app/models.py", "kind": "import"}, {"s": "backend/tests/utils/user.py", "t": "backend/tests/utils/utils.py", "kind": "import"}, {"s": "backend/tests/api/routes/test_users.py", "t": "backend/app/__init__.py", "kind": "import"}, {"s": "backend/tests/api/routes/test_users.py", "t": "backend/app/core/config.py", "kind": "import"}, {"s": "backend/tests/api/routes/test_users.py", "t": "backend/app/core/security.py", "kind": "import"}, {"s": "backend/tests/api/routes/test_users.py", "t": "backend/app/models.py", "kind": "import"}, {"s": "backend/tests/api/routes/test_users.py", "t": "backend/tests/utils/user.py", "kind": "import"}, {"s": "backend/tests/api/routes/test_users.py", "t": "backend/tests/utils/utils.py", "kind": "import"}, {"s": "backend/tests/api/routes/test_login.py", "t": "backend/app/core/config.py", "kind": "import"}, {"s": "backend/tests/api/routes/test_login.py", "t": "backend/app/core/security.py", "kind": "import"}, {"s": "backend/tests/api/routes/test_login.py", "t": "backend/app/crud.py", "kind": "import"}, {"s": "backend/tests/api/routes/test_login.py", "t": "backend/app/models.py", "kind": "import"}, {"s": "backend/tests/api/routes/test_login.py", "t": "backend/app/utils.py", "kind": "import"}, {"s": "backend/tests/api/routes/test_login.py", "t": "backend/tests/utils/user.py", "kind": "import"}, {"s": "backend/tests/api/routes/test_login.py", "t": "backend/tests/utils/utils.py", "kind": "import"}, {"s": "backend/tests/api/routes/test_items.py", "t": "backend/app/core/config.py", "kind": "import"}, {"s": "backend/tests/api/routes/test_items.py", "t": "backend/tests/utils/item.py", "kind": "import"}, {"s": "backend/tests/api/routes/test_private.py", "t": "backend/app/core/config.py", "kind": "import"}, {"s": "backend/tests/api/routes/test_private.py", "t": "backend/app/models.py", "kind": "import"}, {"s": "frontend/src/routeTree.gen.ts", "t": "frontend/src/routes/__root.tsx", "kind": "import"}, {"s": "frontend/src/routeTree.gen.ts", "t": "frontend/src/routes/signup.tsx", "kind": "import"}, {"s": "frontend/src/routeTree.gen.ts", "t": "frontend/src/routes/reset-password.tsx", "kind": "import"}, {"s": "frontend/src/routeTree.gen.ts", "t": "frontend/src/routes/recover-password.tsx", "kind": "import"}, {"s": "frontend/src/routeTree.gen.ts", "t": "frontend/src/routes/login.tsx", "kind": "import"}, {"s": "frontend/src/routeTree.gen.ts", "t": "frontend/src/routes/_layout.tsx", "kind": "import"}, {"s": "frontend/src/routeTree.gen.ts", "t": "frontend/src/routes/_layout/index.tsx", "kind": "import"}, {"s": "frontend/src/routeTree.gen.ts", "t": "frontend/src/routes/_layout/settings.tsx", "kind": "import"}, {"s": "frontend/src/routeTree.gen.ts", "t": "frontend/src/routes/_layout/items.tsx", "kind": "import"}, {"s": "frontend/src/routeTree.gen.ts", "t": "frontend/src/routes/_layout/admin.tsx", "kind": "import"}, {"s": "frontend/src/main.tsx", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/src/main.tsx", "t": "frontend/src/components/theme-provider.tsx", "kind": "import"}, {"s": "frontend/src/main.tsx", "t": "frontend/src/components/ui/sonner.tsx", "kind": "import"}, {"s": "frontend/src/utils.ts", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/tests/reset-password.spec.ts", "t": "frontend/tests/utils/mailcatcher.ts", "kind": "import"}, {"s": "frontend/tests/reset-password.spec.ts", "t": "frontend/tests/utils/random.ts", "kind": "import"}, {"s": "frontend/tests/reset-password.spec.ts", "t": "frontend/tests/utils/user.ts", "kind": "import"}, {"s": "frontend/tests/login.spec.ts", "t": "frontend/tests/config.ts", "kind": "import"}, {"s": "frontend/tests/login.spec.ts", "t": "frontend/tests/utils/random.ts", "kind": "import"}, {"s": "frontend/tests/admin.spec.ts", "t": "frontend/tests/config.ts", "kind": "import"}, {"s": "frontend/tests/admin.spec.ts", "t": "frontend/tests/utils/privateApi.ts", "kind": "import"}, {"s": "frontend/tests/admin.spec.ts", "t": "frontend/tests/utils/random.ts", "kind": "import"}, {"s": "frontend/tests/admin.spec.ts", "t": "frontend/tests/utils/user.ts", "kind": "import"}, {"s": "frontend/tests/user-settings.spec.ts", "t": "frontend/tests/config.ts", "kind": "import"}, {"s": "frontend/tests/user-settings.spec.ts", "t": "frontend/tests/utils/privateApi.ts", "kind": "import"}, {"s": "frontend/tests/user-settings.spec.ts", "t": "frontend/tests/utils/random.ts", "kind": "import"}, {"s": "frontend/tests/user-settings.spec.ts", "t": "frontend/tests/utils/user.ts", "kind": "import"}, {"s": "frontend/tests/sign-up.spec.ts", "t": "frontend/tests/utils/random.ts", "kind": "import"}, {"s": "frontend/tests/auth.setup.ts", "t": "frontend/tests/config.ts", "kind": "import"}, {"s": "frontend/tests/items.spec.ts", "t": "frontend/tests/utils/privateApi.ts", "kind": "import"}, {"s": "frontend/tests/items.spec.ts", "t": "frontend/tests/utils/random.ts", "kind": "import"}, {"s": "frontend/tests/items.spec.ts", "t": "frontend/tests/utils/user.ts", "kind": "import"}, {"s": "frontend/src/routes/recover-password.tsx", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/src/routes/recover-password.tsx", "t": "frontend/src/components/Common/AuthLayout.tsx", "kind": "import"}, {"s": "frontend/src/routes/recover-password.tsx", "t": "frontend/src/components/ui/form.tsx", "kind": "import"}, {"s": "frontend/src/routes/recover-password.tsx", "t": "frontend/src/components/ui/input.tsx", "kind": "import"}, {"s": "frontend/src/routes/recover-password.tsx", "t": "frontend/src/components/ui/loading-button.tsx", "kind": "import"}, {"s": "frontend/src/routes/recover-password.tsx", "t": "frontend/src/hooks/useAuth.ts", "kind": "import"}, {"s": "frontend/src/routes/recover-password.tsx", "t": "frontend/src/hooks/useCustomToast.ts", "kind": "import"}, {"s": "frontend/src/routes/recover-password.tsx", "t": "frontend/src/utils.ts", "kind": "import"}, {"s": "frontend/src/routes/login.tsx", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/src/routes/login.tsx", "t": "frontend/src/components/Common/AuthLayout.tsx", "kind": "import"}, {"s": "frontend/src/routes/login.tsx", "t": "frontend/src/components/ui/form.tsx", "kind": "import"}, {"s": "frontend/src/routes/login.tsx", "t": "frontend/src/components/ui/input.tsx", "kind": "import"}, {"s": "frontend/src/routes/login.tsx", "t": "frontend/src/components/ui/loading-button.tsx", "kind": "import"}, {"s": "frontend/src/routes/login.tsx", "t": "frontend/src/components/ui/password-input.tsx", "kind": "import"}, {"s": "frontend/src/routes/login.tsx", "t": "frontend/src/hooks/useAuth.ts", "kind": "import"}, {"s": "frontend/src/routes/signup.tsx", "t": "frontend/src/components/Common/AuthLayout.tsx", "kind": "import"}, {"s": "frontend/src/routes/signup.tsx", "t": "frontend/src/components/ui/form.tsx", "kind": "import"}, {"s": "frontend/src/routes/signup.tsx", "t": "frontend/src/components/ui/input.tsx", "kind": "import"}, {"s": "frontend/src/routes/signup.tsx", "t": "frontend/src/components/ui/loading-button.tsx", "kind": "import"}, {"s": "frontend/src/routes/signup.tsx", "t": "frontend/src/components/ui/password-input.tsx", "kind": "import"}, {"s": "frontend/src/routes/signup.tsx", "t": "frontend/src/hooks/useAuth.ts", "kind": "import"}, {"s": "frontend/src/routes/reset-password.tsx", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/src/routes/reset-password.tsx", "t": "frontend/src/components/Common/AuthLayout.tsx", "kind": "import"}, {"s": "frontend/src/routes/reset-password.tsx", "t": "frontend/src/components/ui/form.tsx", "kind": "import"}, {"s": "frontend/src/routes/reset-password.tsx", "t": "frontend/src/components/ui/loading-button.tsx", "kind": "import"}, {"s": "frontend/src/routes/reset-password.tsx", "t": "frontend/src/components/ui/password-input.tsx", "kind": "import"}, {"s": "frontend/src/routes/reset-password.tsx", "t": "frontend/src/hooks/useAuth.ts", "kind": "import"}, {"s": "frontend/src/routes/reset-password.tsx", "t": "frontend/src/hooks/useCustomToast.ts", "kind": "import"}, {"s": "frontend/src/routes/reset-password.tsx", "t": "frontend/src/utils.ts", "kind": "import"}, {"s": "frontend/src/routes/__root.tsx", "t": "frontend/src/components/Common/ErrorComponent.tsx", "kind": "import"}, {"s": "frontend/src/routes/__root.tsx", "t": "frontend/src/components/Common/NotFound.tsx", "kind": "import"}, {"s": "frontend/src/routes/_layout.tsx", "t": "frontend/src/components/Common/Footer.tsx", "kind": "import"}, {"s": "frontend/src/routes/_layout.tsx", "t": "frontend/src/components/Sidebar/AppSidebar.tsx", "kind": "import"}, {"s": "frontend/src/routes/_layout.tsx", "t": "frontend/src/components/ui/sidebar.tsx", "kind": "import"}, {"s": "frontend/src/routes/_layout.tsx", "t": "frontend/src/hooks/useAuth.ts", "kind": "import"}, {"s": "frontend/src/client/sdk.gen.ts", "t": "frontend/src/client/core/CancelablePromise.ts", "kind": "import"}, {"s": "frontend/src/client/sdk.gen.ts", "t": "frontend/src/client/core/OpenAPI.ts", "kind": "import"}, {"s": "frontend/src/client/sdk.gen.ts", "t": "frontend/src/client/core/request.ts", "kind": "import"}, {"s": "frontend/src/client/index.ts", "t": "frontend/src/client/core/ApiError.ts", "kind": "import"}, {"s": "frontend/src/client/index.ts", "t": "frontend/src/client/core/CancelablePromise.ts", "kind": "import"}, {"s": "frontend/src/client/index.ts", "t": "frontend/src/client/core/OpenAPI.ts", "kind": "import"}, {"s": "frontend/src/hooks/useAuth.ts", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/src/hooks/useAuth.ts", "t": "frontend/src/utils.ts", "kind": "import"}, {"s": "frontend/src/hooks/useAuth.ts", "t": "frontend/src/hooks/useCustomToast.ts", "kind": "import"}, {"s": "frontend/src/routes/_layout/admin.tsx", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/src/routes/_layout/admin.tsx", "t": "frontend/src/components/Admin/AddUser.tsx", "kind": "import"}, {"s": "frontend/src/routes/_layout/admin.tsx", "t": "frontend/src/components/Admin/columns.tsx", "kind": "import"}, {"s": "frontend/src/routes/_layout/admin.tsx", "t": "frontend/src/components/Common/DataTable.tsx", "kind": "import"}, {"s": "frontend/src/routes/_layout/admin.tsx", "t": "frontend/src/components/Pending/PendingUsers.tsx", "kind": "import"}, {"s": "frontend/src/routes/_layout/admin.tsx", "t": "frontend/src/hooks/useAuth.ts", "kind": "import"}, {"s": "frontend/src/routes/_layout/items.tsx", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/src/routes/_layout/items.tsx", "t": "frontend/src/components/Common/DataTable.tsx", "kind": "import"}, {"s": "frontend/src/routes/_layout/items.tsx", "t": "frontend/src/components/Items/AddItem.tsx", "kind": "import"}, {"s": "frontend/src/routes/_layout/items.tsx", "t": "frontend/src/components/Items/columns.tsx", "kind": "import"}, {"s": "frontend/src/routes/_layout/items.tsx", "t": "frontend/src/components/Pending/PendingItems.tsx", "kind": "import"}, {"s": "frontend/src/routes/_layout/settings.tsx", "t": "frontend/src/components/UserSettings/ChangePassword.tsx", "kind": "import"}, {"s": "frontend/src/routes/_layout/settings.tsx", "t": "frontend/src/components/UserSettings/DeleteAccount.tsx", "kind": "import"}, {"s": "frontend/src/routes/_layout/settings.tsx", "t": "frontend/src/components/UserSettings/UserInformation.tsx", "kind": "import"}, {"s": "frontend/src/routes/_layout/settings.tsx", "t": "frontend/src/components/ui/tabs.tsx", "kind": "import"}, {"s": "frontend/src/routes/_layout/settings.tsx", "t": "frontend/src/hooks/useAuth.ts", "kind": "import"}, {"s": "frontend/src/routes/_layout/index.tsx", "t": "frontend/src/hooks/useAuth.ts", "kind": "import"}, {"s": "frontend/src/components/Sidebar/AppSidebar.tsx", "t": "frontend/src/components/Common/Appearance.tsx", "kind": "import"}, {"s": "frontend/src/components/Sidebar/AppSidebar.tsx", "t": "frontend/src/components/Common/Logo.tsx", "kind": "import"}, {"s": "frontend/src/components/Sidebar/AppSidebar.tsx", "t": "frontend/src/components/ui/sidebar.tsx", "kind": "import"}, {"s": "frontend/src/components/Sidebar/AppSidebar.tsx", "t": "frontend/src/hooks/useAuth.ts", "kind": "import"}, {"s": "frontend/src/components/Sidebar/AppSidebar.tsx", "t": "frontend/src/components/Sidebar/Main.tsx", "kind": "import"}, {"s": "frontend/src/components/Sidebar/AppSidebar.tsx", "t": "frontend/src/components/Sidebar/User.tsx", "kind": "import"}, {"s": "frontend/src/components/Sidebar/Main.tsx", "t": "frontend/src/components/ui/sidebar.tsx", "kind": "import"}, {"s": "frontend/src/components/Sidebar/User.tsx", "t": "frontend/src/components/ui/avatar.tsx", "kind": "import"}, {"s": "frontend/src/components/Sidebar/User.tsx", "t": "frontend/src/components/ui/dropdown-menu.tsx", "kind": "import"}, {"s": "frontend/src/components/Sidebar/User.tsx", "t": "frontend/src/components/ui/sidebar.tsx", "kind": "import"}, {"s": "frontend/src/components/Sidebar/User.tsx", "t": "frontend/src/hooks/useAuth.ts", "kind": "import"}, {"s": "frontend/src/components/Sidebar/User.tsx", "t": "frontend/src/utils.ts", "kind": "import"}, {"s": "frontend/src/components/Items/DeleteItem.tsx", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/src/components/Items/DeleteItem.tsx", "t": "frontend/src/components/ui/button.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/DeleteItem.tsx", "t": "frontend/src/components/ui/dialog.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/DeleteItem.tsx", "t": "frontend/src/components/ui/dropdown-menu.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/DeleteItem.tsx", "t": "frontend/src/components/ui/loading-button.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/DeleteItem.tsx", "t": "frontend/src/hooks/useCustomToast.ts", "kind": "import"}, {"s": "frontend/src/components/Items/DeleteItem.tsx", "t": "frontend/src/utils.ts", "kind": "import"}, {"s": "frontend/src/components/Items/ItemActionsMenu.tsx", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/src/components/Items/ItemActionsMenu.tsx", "t": "frontend/src/components/ui/button.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/ItemActionsMenu.tsx", "t": "frontend/src/components/ui/dropdown-menu.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/ItemActionsMenu.tsx", "t": "frontend/src/components/Items/DeleteItem.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/ItemActionsMenu.tsx", "t": "frontend/src/components/Items/EditItem.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/columns.tsx", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/src/components/Items/columns.tsx", "t": "frontend/src/components/ui/button.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/columns.tsx", "t": "frontend/src/hooks/useCopyToClipboard.ts", "kind": "import"}, {"s": "frontend/src/components/Items/columns.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/Items/columns.tsx", "t": "frontend/src/components/Items/ItemActionsMenu.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/EditItem.tsx", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/src/components/Items/EditItem.tsx", "t": "frontend/src/components/ui/button.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/EditItem.tsx", "t": "frontend/src/components/ui/dialog.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/EditItem.tsx", "t": "frontend/src/components/ui/dropdown-menu.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/EditItem.tsx", "t": "frontend/src/components/ui/form.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/EditItem.tsx", "t": "frontend/src/components/ui/input.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/EditItem.tsx", "t": "frontend/src/components/ui/loading-button.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/EditItem.tsx", "t": "frontend/src/hooks/useCustomToast.ts", "kind": "import"}, {"s": "frontend/src/components/Items/EditItem.tsx", "t": "frontend/src/utils.ts", "kind": "import"}, {"s": "frontend/src/components/Items/AddItem.tsx", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/src/components/Items/AddItem.tsx", "t": "frontend/src/components/ui/button.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/AddItem.tsx", "t": "frontend/src/components/ui/dialog.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/AddItem.tsx", "t": "frontend/src/components/ui/form.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/AddItem.tsx", "t": "frontend/src/components/ui/input.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/AddItem.tsx", "t": "frontend/src/components/ui/loading-button.tsx", "kind": "import"}, {"s": "frontend/src/components/Items/AddItem.tsx", "t": "frontend/src/hooks/useCustomToast.ts", "kind": "import"}, {"s": "frontend/src/components/Items/AddItem.tsx", "t": "frontend/src/utils.ts", "kind": "import"}, {"s": "frontend/src/components/UserSettings/DeleteAccount.tsx", "t": "frontend/src/components/UserSettings/DeleteConfirmation.tsx", "kind": "import"}, {"s": "frontend/src/components/UserSettings/DeleteConfirmation.tsx", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/src/components/UserSettings/DeleteConfirmation.tsx", "t": "frontend/src/components/ui/button.tsx", "kind": "import"}, {"s": "frontend/src/components/UserSettings/DeleteConfirmation.tsx", "t": "frontend/src/components/ui/dialog.tsx", "kind": "import"}, {"s": "frontend/src/components/UserSettings/DeleteConfirmation.tsx", "t": "frontend/src/components/ui/loading-button.tsx", "kind": "import"}, {"s": "frontend/src/components/UserSettings/DeleteConfirmation.tsx", "t": "frontend/src/hooks/useAuth.ts", "kind": "import"}, {"s": "frontend/src/components/UserSettings/DeleteConfirmation.tsx", "t": "frontend/src/hooks/useCustomToast.ts", "kind": "import"}, {"s": "frontend/src/components/UserSettings/DeleteConfirmation.tsx", "t": "frontend/src/utils.ts", "kind": "import"}, {"s": "frontend/src/components/UserSettings/UserInformation.tsx", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/src/components/UserSettings/UserInformation.tsx", "t": "frontend/src/components/ui/button.tsx", "kind": "import"}, {"s": "frontend/src/components/UserSettings/UserInformation.tsx", "t": "frontend/src/components/ui/form.tsx", "kind": "import"}, {"s": "frontend/src/components/UserSettings/UserInformation.tsx", "t": "frontend/src/components/ui/input.tsx", "kind": "import"}, {"s": "frontend/src/components/UserSettings/UserInformation.tsx", "t": "frontend/src/components/ui/loading-button.tsx", "kind": "import"}, {"s": "frontend/src/components/UserSettings/UserInformation.tsx", "t": "frontend/src/hooks/useAuth.ts", "kind": "import"}, {"s": "frontend/src/components/UserSettings/UserInformation.tsx", "t": "frontend/src/hooks/useCustomToast.ts", "kind": "import"}, {"s": "frontend/src/components/UserSettings/UserInformation.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/UserSettings/UserInformation.tsx", "t": "frontend/src/utils.ts", "kind": "import"}, {"s": "frontend/src/components/UserSettings/ChangePassword.tsx", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/src/components/UserSettings/ChangePassword.tsx", "t": "frontend/src/components/ui/form.tsx", "kind": "import"}, {"s": "frontend/src/components/UserSettings/ChangePassword.tsx", "t": "frontend/src/components/ui/loading-button.tsx", "kind": "import"}, {"s": "frontend/src/components/UserSettings/ChangePassword.tsx", "t": "frontend/src/components/ui/password-input.tsx", "kind": "import"}, {"s": "frontend/src/components/UserSettings/ChangePassword.tsx", "t": "frontend/src/hooks/useCustomToast.ts", "kind": "import"}, {"s": "frontend/src/components/UserSettings/ChangePassword.tsx", "t": "frontend/src/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/avatar.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/badge.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/card.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/skeleton.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/dialog.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/sidebar.tsx", "t": "frontend/src/components/ui/button.tsx", "kind": "import"}, {"s": "frontend/src/components/ui/sidebar.tsx", "t": "frontend/src/components/ui/input.tsx", "kind": "import"}, {"s": "frontend/src/components/ui/sidebar.tsx", "t": "frontend/src/components/ui/separator.tsx", "kind": "import"}, {"s": "frontend/src/components/ui/sidebar.tsx", "t": "frontend/src/components/ui/sheet.tsx", "kind": "import"}, {"s": "frontend/src/components/ui/sidebar.tsx", "t": "frontend/src/components/ui/skeleton.tsx", "kind": "import"}, {"s": "frontend/src/components/ui/sidebar.tsx", "t": "frontend/src/components/ui/tooltip.tsx", "kind": "import"}, {"s": "frontend/src/components/ui/sidebar.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/sidebar.tsx", "t": "frontend/src/hooks/useMobile.ts", "kind": "import"}, {"s": "frontend/src/components/ui/separator.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/label.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/password-input.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/password-input.tsx", "t": "frontend/src/components/ui/button.tsx", "kind": "import"}, {"s": "frontend/src/components/ui/pagination.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/pagination.tsx", "t": "frontend/src/components/ui/button.tsx", "kind": "import"}, {"s": "frontend/src/components/ui/checkbox.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/button-group.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/button-group.tsx", "t": "frontend/src/components/ui/separator.tsx", "kind": "import"}, {"s": "frontend/src/components/ui/tabs.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/button.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/dropdown-menu.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/form.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/form.tsx", "t": "frontend/src/components/ui/label.tsx", "kind": "import"}, {"s": "frontend/src/components/ui/select.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/alert.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/tooltip.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/input.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/sheet.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/table.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/ui/loading-button.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/Pending/PendingItems.tsx", "t": "frontend/src/components/ui/skeleton.tsx", "kind": "import"}, {"s": "frontend/src/components/Pending/PendingItems.tsx", "t": "frontend/src/components/ui/table.tsx", "kind": "import"}, {"s": "frontend/src/components/Pending/PendingUsers.tsx", "t": "frontend/src/components/ui/skeleton.tsx", "kind": "import"}, {"s": "frontend/src/components/Pending/PendingUsers.tsx", "t": "frontend/src/components/ui/table.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/UserActionsMenu.tsx", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/src/components/Admin/UserActionsMenu.tsx", "t": "frontend/src/components/ui/button.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/UserActionsMenu.tsx", "t": "frontend/src/components/ui/dropdown-menu.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/UserActionsMenu.tsx", "t": "frontend/src/hooks/useAuth.ts", "kind": "import"}, {"s": "frontend/src/components/Admin/UserActionsMenu.tsx", "t": "frontend/src/components/Admin/DeleteUser.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/UserActionsMenu.tsx", "t": "frontend/src/components/Admin/EditUser.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/AddUser.tsx", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/src/components/Admin/AddUser.tsx", "t": "frontend/src/components/ui/button.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/AddUser.tsx", "t": "frontend/src/components/ui/checkbox.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/AddUser.tsx", "t": "frontend/src/components/ui/dialog.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/AddUser.tsx", "t": "frontend/src/components/ui/form.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/AddUser.tsx", "t": "frontend/src/components/ui/input.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/AddUser.tsx", "t": "frontend/src/components/ui/loading-button.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/AddUser.tsx", "t": "frontend/src/hooks/useCustomToast.ts", "kind": "import"}, {"s": "frontend/src/components/Admin/AddUser.tsx", "t": "frontend/src/utils.ts", "kind": "import"}, {"s": "frontend/src/components/Admin/DeleteUser.tsx", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/src/components/Admin/DeleteUser.tsx", "t": "frontend/src/components/ui/button.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/DeleteUser.tsx", "t": "frontend/src/components/ui/dialog.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/DeleteUser.tsx", "t": "frontend/src/components/ui/dropdown-menu.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/DeleteUser.tsx", "t": "frontend/src/components/ui/loading-button.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/DeleteUser.tsx", "t": "frontend/src/hooks/useCustomToast.ts", "kind": "import"}, {"s": "frontend/src/components/Admin/DeleteUser.tsx", "t": "frontend/src/utils.ts", "kind": "import"}, {"s": "frontend/src/components/Admin/columns.tsx", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/src/components/Admin/columns.tsx", "t": "frontend/src/components/ui/badge.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/columns.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/Admin/columns.tsx", "t": "frontend/src/components/Admin/UserActionsMenu.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/EditUser.tsx", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "frontend/src/components/Admin/EditUser.tsx", "t": "frontend/src/components/ui/button.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/EditUser.tsx", "t": "frontend/src/components/ui/checkbox.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/EditUser.tsx", "t": "frontend/src/components/ui/dialog.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/EditUser.tsx", "t": "frontend/src/components/ui/dropdown-menu.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/EditUser.tsx", "t": "frontend/src/components/ui/form.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/EditUser.tsx", "t": "frontend/src/components/ui/input.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/EditUser.tsx", "t": "frontend/src/components/ui/loading-button.tsx", "kind": "import"}, {"s": "frontend/src/components/Admin/EditUser.tsx", "t": "frontend/src/hooks/useCustomToast.ts", "kind": "import"}, {"s": "frontend/src/components/Admin/EditUser.tsx", "t": "frontend/src/utils.ts", "kind": "import"}, {"s": "frontend/src/components/Common/ErrorComponent.tsx", "t": "frontend/src/components/ui/button.tsx", "kind": "import"}, {"s": "frontend/src/components/Common/Logo.tsx", "t": "frontend/src/components/theme-provider.tsx", "kind": "import"}, {"s": "frontend/src/components/Common/Logo.tsx", "t": "frontend/src/lib/utils.ts", "kind": "import"}, {"s": "frontend/src/components/Common/DataTable.tsx", "t": "frontend/src/components/ui/button.tsx", "kind": "import"}, {"s": "frontend/src/components/Common/DataTable.tsx", "t": "frontend/src/components/ui/select.tsx", "kind": "import"}, {"s": "frontend/src/components/Common/DataTable.tsx", "t": "frontend/src/components/ui/table.tsx", "kind": "import"}, {"s": "frontend/src/components/Common/NotFound.tsx", "t": "frontend/src/components/ui/button.tsx", "kind": "import"}, {"s": "frontend/src/components/Common/AuthLayout.tsx", "t": "frontend/src/components/Common/Appearance.tsx", "kind": "import"}, {"s": "frontend/src/components/Common/AuthLayout.tsx", "t": "frontend/src/components/Common/Logo.tsx", "kind": "import"}, {"s": "frontend/src/components/Common/AuthLayout.tsx", "t": "frontend/src/components/Common/Footer.tsx", "kind": "import"}, {"s": "frontend/src/components/Common/Appearance.tsx", "t": "frontend/src/components/theme-provider.tsx", "kind": "import"}, {"s": "frontend/src/components/Common/Appearance.tsx", "t": "frontend/src/components/ui/button.tsx", "kind": "import"}, {"s": "frontend/src/components/Common/Appearance.tsx", "t": "frontend/src/components/ui/dropdown-menu.tsx", "kind": "import"}, {"s": "frontend/src/components/Common/Appearance.tsx", "t": "frontend/src/components/ui/sidebar.tsx", "kind": "import"}, {"s": "frontend/src/client/core/ApiError.ts", "t": "frontend/src/client/core/ApiRequestOptions.ts", "kind": "import"}, {"s": "frontend/src/client/core/ApiError.ts", "t": "frontend/src/client/core/ApiResult.ts", "kind": "import"}, {"s": "frontend/src/client/core/OpenAPI.ts", "t": "frontend/src/client/core/ApiRequestOptions.ts", "kind": "import"}, {"s": "frontend/src/client/core/request.ts", "t": "frontend/src/client/core/ApiError.ts", "kind": "import"}, {"s": "frontend/src/client/core/request.ts", "t": "frontend/src/client/core/ApiRequestOptions.ts", "kind": "import"}, {"s": "frontend/src/client/core/request.ts", "t": "frontend/src/client/core/ApiResult.ts", "kind": "import"}, {"s": "frontend/src/client/core/request.ts", "t": "frontend/src/client/core/CancelablePromise.ts", "kind": "import"}, {"s": "frontend/src/client/core/request.ts", "t": "frontend/src/client/core/OpenAPI.ts", "kind": "import"}, {"s": "frontend/tests/utils/privateApi.ts", "t": "frontend/src/client/index.ts", "kind": "import"}, {"s": "backend/app/core/config.py", "t": "svc:PostgreSQL", "kind": "service"}, {"s": "entry:http", "t": "backend/app/api/routes/utils.py", "kind": "entry"}, {"s": "entry:http", "t": "backend/app/api/routes/login.py", "kind": "entry"}, {"s": "entry:http", "t": "backend/app/api/routes/private.py", "kind": "entry"}, {"s": "entry:http", "t": "backend/app/api/routes/users.py", "kind": "entry"}, {"s": "entry:http", "t": "backend/app/api/routes/items.py", "kind": "entry"}], "meta": {"files": 142, "links": 340, "aggregated": false, "shown_nodes": 144, "has_access_log": false}}</script>
+</div>
 
 <div class="section">
 <div class="section-title">Full System Architecture — 4 Components</div>
-<div class="arch-wrap"><div class="arch-layer"><div class="arch-row-label">EXTERNAL SOURCES &amp; CLIENTS</div><div class="arch-boxes"><div class="arch-box" style="background:#0a1a0e;border-color:#22c55e"><div class="bname" style="color:#22c55e">Users / API Clients</div><div class="bdesc">HTTPS / WebSocket</div><div class="bcode">JWT</div></div></div></div>
-<div class="arch-arrow">↓</div>
-<div class="arch-layer"><div class="arch-row-label">GATEWAY / REVERSE PROXY</div><div class="arch-boxes"><div class="arch-box" style="background:#1a2535;border-color:#94a3b8"><div class="bname" style="color:#94a3b8">nginx</div><div class="bdesc">worker_connections ?</div><div class="bcode">TLS termination</div></div></div></div>
-<div class="arch-arrow">↓</div>
-<div class="arch-layer"><div class="arch-row-label">APPLICATION LAYER</div><div class="arch-boxes"><div class="arch-box" style="background:#0f1a2e;border-color:#3b82f6"><div class="bname" style="color:#3b82f6">FastAPI</div><div class="bdesc">async 1 worker × 1 replica</div><div class="bcode">jwt · oauth</div></div><div class="arch-box" style="background:#061a20;border-color:#06b6d4"><div class="bname" style="color:#06b6d4">React</div><div class="bdesc">UI framework</div></div></div></div>
-<div class="arch-arrow">↓</div>
-<div class="arch-layer"><div class="arch-row-label">PROCESSING &amp; QUEUE LAYER</div><div class="arch-boxes"><div class="arch-box" style="background:#1a1408;border-color:#eab308"><div class="bname" style="color:#eab308">Auth Middleware</div><div class="bdesc">JWT decode · RBAC scope check</div></div></div></div>
-<div class="arch-arrow">↓</div>
-<div class="arch-layer"><div class="arch-row-label">STORAGE &amp; PERSISTENCE</div><div class="arch-boxes"><div class="arch-box" style="background:#0f1a2e;border-color:#3b82f6"><div class="bname" style="color:#3b82f6">PostgreSQL</div><div class="bdesc">Primary database</div></div></div></div></div>
+<p style="font-size:11px;color:var(--muted);margin:-4px 0 16px">Detection is pattern-based static analysis. Dashed boxes are dependencies declared in your manifest but not matched to a usage pattern in source — may be wired through a custom abstraction. Solid boxes are pattern-confirmed in source. A component not shown here isn't confirmed absent from the project — only undetected.</p>
+<div class="arch-wrap"><div class="arch-flow" style="--n:5;--t:6.1s"><div class="arch-layer"><div class="arch-row-label">EXTERNAL SOURCES &amp; CLIENTS</div><div class="arch-boxes" style="--i:0"><div class="arch-box" data-node="Users / API Clients" style="background:#0a1a0e;border-color:#22c55e;--gc:rgba(34,197,94,.45)"><div class="bname" style="color:#22c55e"><span class="bicon">🌐</span>Users / API Clients</div><div class="bdesc">HTTPS / WebSocket</div><div class="bcode">JWT</div></div></div></div>
+<div class="arch-arrow" style="--i:0"><div class="arrow-line"></div><div class="arrow-dot"></div></div>
+<div class="arch-layer"><div class="arch-row-label">GATEWAY / REVERSE PROXY</div><div class="arch-boxes" style="--i:1"><div class="arch-box" data-node="nginx" style="background:#1a2535;border-color:#94a3b8;--gc:rgba(148,163,184,.45)"><div class="bname" style="color:#94a3b8"><span class="bicon">🚦</span>nginx</div><div class="bdesc">worker_connections ?</div><div class="bcode">TLS termination</div></div></div></div>
+<div class="arch-arrow" style="--i:1"><div class="arrow-line"></div><div class="arrow-dot"></div></div>
+<div class="arch-layer"><div class="arch-row-label">APPLICATION LAYER</div><div class="arch-boxes" style="--i:2"><div class="arch-box" data-node="FastAPI" style="background:#0f1a2e;border-color:#3b82f6;--gc:rgba(59,130,246,.45)"><div class="bname" style="color:#3b82f6"><span class="bicon">⚙️</span>FastAPI</div><div class="bdesc">async 1 worker × 1 replica</div><div class="bcode">jwt · oauth</div></div><div class="arch-box" data-node="React" style="background:#061a20;border-color:#06b6d4;--gc:rgba(6,182,212,.45)"><div class="bname" style="color:#06b6d4"><span class="bicon">🖥️</span>React</div><div class="bdesc">UI framework</div></div></div></div>
+<div class="arch-arrow" style="--i:2"><div class="arrow-line"></div><div class="arrow-dot"></div></div>
+<div class="arch-layer"><div class="arch-row-label">PROCESSING &amp; QUEUE LAYER</div><div class="arch-boxes" style="--i:3"><div class="arch-box" data-node="Auth Middleware" style="background:#1a1408;border-color:#eab308;--gc:rgba(234,179,8,.45)"><div class="bname" style="color:#eab308"><span class="bicon">🔑</span>Auth Middleware</div><div class="bdesc">JWT decode · RBAC scope check</div></div></div></div>
+<div class="arch-arrow" style="--i:3"><div class="arrow-line"></div><div class="arrow-dot"></div></div>
+<div class="arch-layer"><div class="arch-row-label">STORAGE &amp; PERSISTENCE</div><div class="arch-boxes" style="--i:4"><div class="arch-box" data-node="PostgreSQL" style="background:#0f1a2e;border-color:#3b82f6;--gc:rgba(59,130,246,.45)"><div class="bname" style="color:#3b82f6"><span class="bicon">🗄️</span>PostgreSQL</div><div class="bdesc">Primary database</div></div></div></div></div><svg id="edge-overlay"></svg><script type="application/json" id="edges-data">[]</script></div>
+
 <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-top:20px"><div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Detected API Routes (10+)</div><div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">DELETE /me</div><div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">DELETE /{id}</div><div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">DELETE /{user_id}</div><div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">GET /</div><div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">GET /health-check/</div><div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">GET /me</div><div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">GET /{id}</div><div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">GET /{user_id}</div><div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">PATCH /me</div><div style="font-family:var(--mono);font-size:11px;padding:3px 0;color:#64748b">PATCH /me/password</div></div>
 </div>
 
 <div class="section">
 <div class="section-title">Data Flow Paths — Step by Step</div>
-<div class="flows"><div class="flow-card"><div class="flow-header" style="background:rgba(59,130,246,.08)"><div class="dot" style="background:#3b82f6"></div>HTTP Request Flow</div><div class="flow-step"><div class="step-num" style="background:rgba(59,130,246,.15);color:#3b82f6">1</div><div><div class="step-title">Client sends request</div><div class="step-desc">HTTPS request to nginx</div></div></div><div class="flow-step"><div class="step-num" style="background:rgba(59,130,246,.15);color:#3b82f6">2</div><div><div class="step-title">Auth & validation</div><div class="step-desc">JWT decode, request validated</div></div></div><div class="flow-step"><div class="step-num" style="background:rgba(59,130,246,.15);color:#3b82f6">3</div><div><div class="step-title">Handler executes</div><div class="step-desc">FastAPI route handler processes request, queries DB</div></div></div><div class="flow-step"><div class="step-num" style="background:rgba(59,130,246,.15);color:#3b82f6">4</div><div><div class="step-title">Response returned</div><div class="step-desc">JSON response sent back to client</div></div></div></div></div>
+<div class="flows"><div class="flow-card" style="--n:4;--t:4.4s"><div class="flow-header" style="background:rgba(59,130,246,.08)"><div class="dot" style="background:#3b82f6"></div>HTTP Request Flow</div><div class="flow-step"><div class="step-num" style="background:rgba(59,130,246,.15);color:#3b82f6;--i:0">1</div><div><div class="step-title">Client sends request</div><div class="step-desc">HTTPS request to nginx</div></div></div><div class="flow-step"><div class="step-num" style="background:rgba(59,130,246,.15);color:#3b82f6;--i:1">2</div><div><div class="step-title">Auth & validation</div><div class="step-desc">JWT decode, request validated</div></div></div><div class="flow-step"><div class="step-num" style="background:rgba(59,130,246,.15);color:#3b82f6;--i:2">3</div><div><div class="step-title">Handler executes</div><div class="step-desc">FastAPI route handler processes request, queries DB</div></div></div><div class="flow-step"><div class="step-num" style="background:rgba(59,130,246,.15);color:#3b82f6;--i:3">4</div><div><div class="step-title">Response returned</div><div class="step-desc">JSON response sent back to client</div></div></div></div></div>
 </div>
 
 <div class="section">
@@ -124,7 +277,491 @@ code{font-family:var(--mono);font-size:11px;color:#06b6d4}
 <div class="bn-grid"><div class="bn-card"><div class="bn-title"><span>I/O event loop</span><span style="color:#ef4444;font-family:var(--mono);font-size:12px">CRITICAL</span></div><div class="bn-track"><div class="bn-fill" style="width:95%;background:#ef4444"></div></div><div class="bn-meta">Tightest ceiling among detected constraints: ~100 units of concurrent capacity. Mitigate: add more workers/replicas, or move to an async framework to raise per-worker I/O concurrency.</div></div></div>
 </div>
 
-<footer>fastapi-full-stack-template · System Workflow · 4 components · 2026-07-10 · workflow-generator</footer>
+<footer>fastapi-full-stack-template · System Workflow · 4 components · 2026-07-23 · workflow-generator</footer>
 </div>
+<script>
+(function(){
+  var toggle = document.getElementById('theme-toggle');
+  var root = document.documentElement;
+  if (toggle) {
+    toggle.addEventListener('click', function(){
+      var goingLight = root.getAttribute('data-theme') !== 'light';
+      root.setAttribute('data-theme', goingLight ? 'light' : 'dark');
+      toggle.textContent = goingLight ? '\ud83c\udf19' : '\u2600\ufe0f';
+      drawEdges();
+      document.dispatchEvent(new Event('theme-changed'));
+    });
+  }
+
+  var dataEl = document.getElementById('edges-data');
+  var edges = [];
+  try { edges = dataEl ? JSON.parse(dataEl.textContent) : []; } catch (e) { edges = []; }
+  var svg = document.getElementById('edge-overlay');
+  var wrap = document.querySelector('.arch-wrap');
+
+  function nodeMap(){
+    var map = {};
+    if (!wrap) return map;
+    wrap.querySelectorAll('[data-node]').forEach(function(el){
+      map[el.getAttribute('data-node')] = el;
+    });
+    return map;
+  }
+
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+
+  function shortLabel(label){
+    var s = (label || '').split(' (')[0];
+    return s.length > 28 ? s.slice(0, 27) + '\u2026' : s;
+  }
+
+  function drawEdges(){
+    if (!svg || !wrap || !edges.length) return;
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    var map = nodeMap();
+    var wr = wrap.getBoundingClientRect();
+    svg.setAttribute('width', wrap.scrollWidth);
+    svg.setAttribute('height', wrap.scrollHeight);
+
+    var defs = document.createElementNS(SVG_NS, 'defs');
+    svg.appendChild(defs);
+    var seenColors = {};
+    edges.forEach(function(e){
+      if (seenColors[e.color]) return;
+      seenColors[e.color] = true;
+      var markerId = 'arrow-' + e.color.replace('#', '');
+      var marker = document.createElementNS(SVG_NS, 'marker');
+      marker.setAttribute('id', markerId);
+      marker.setAttribute('viewBox', '0 0 10 10');
+      marker.setAttribute('refX', '8');
+      marker.setAttribute('refY', '5');
+      marker.setAttribute('markerWidth', '7');
+      marker.setAttribute('markerHeight', '7');
+      marker.setAttribute('orient', 'auto-start-reverse');
+      var arrowPath = document.createElementNS(SVG_NS, 'path');
+      arrowPath.setAttribute('d', 'M0,0 L10,5 L0,10 z');
+      arrowPath.setAttribute('fill', e.color);
+      marker.appendChild(arrowPath);
+      defs.appendChild(marker);
+    });
+
+    edges.forEach(function(e){
+      var fromEl = map[e.from];
+      var toEl = map[e.to];
+      if (!fromEl || !toEl) return;
+      var fr = fromEl.getBoundingClientRect();
+      var tr = toEl.getBoundingClientRect();
+      var x1 = fr.left - wr.left + wrap.scrollLeft + fr.width / 2;
+      var y1 = fr.top - wr.top + wrap.scrollTop + fr.height;
+      var x2 = tr.left - wr.left + wrap.scrollLeft + tr.width / 2;
+      var y2 = tr.top - wr.top + wrap.scrollTop;
+      var midY = (y1 + y2) / 2;
+      var d = 'M' + x1 + ',' + y1 + ' L' + x1 + ',' + midY + ' L' + x2 + ',' + midY + ' L' + x2 + ',' + y2;
+      var path = document.createElementNS(SVG_NS, 'path');
+      path.setAttribute('d', d);
+      path.setAttribute('class', 'edge-path animated');
+      path.setAttribute('stroke', e.color);
+      path.setAttribute('marker-end', 'url(#arrow-' + e.color.replace('#', '') + ')');
+      var title = document.createElementNS(SVG_NS, 'title');
+      title.textContent = e.label;
+      path.appendChild(title);
+      svg.appendChild(path);
+
+      var text = document.createElementNS(SVG_NS, 'text');
+      text.setAttribute('class', 'edge-label');
+      text.setAttribute('x', (x1 + x2) / 2);
+      text.setAttribute('y', midY);
+      text.setAttribute('text-anchor', 'middle');
+      text.textContent = shortLabel(e.label);
+      svg.appendChild(text);
+      var bbox = text.getBBox();
+      var bg = document.createElementNS(SVG_NS, 'rect');
+      bg.setAttribute('class', 'edge-label-bg');
+      bg.setAttribute('x', bbox.x - 4);
+      bg.setAttribute('y', bbox.y - 2);
+      bg.setAttribute('width', bbox.width + 8);
+      bg.setAttribute('height', bbox.height + 4);
+      bg.setAttribute('rx', 4);
+      svg.insertBefore(bg, text);
+    });
+  }
+
+  var resizeTimer;
+  window.addEventListener('resize', function(){
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(drawEdges, 150);
+  });
+
+  drawEdges();
+})();
+</script>
+<script>
+(function(){
+  var dataEl = document.getElementById('graph-data');
+  if (!dataEl) return;
+  var data = JSON.parse(dataEl.textContent);
+  var canvas = document.getElementById('code-graph');
+  if (!canvas || !data.nodes.length) return;
+  var ctx = canvas.getContext('2d');
+  var wrap = canvas.parentElement;
+  var tooltip = document.getElementById('graph-tooltip');
+  var reduceMotion = !window.matchMedia('(prefers-reduced-motion: no-preference)').matches;
+
+  function hashStr(s){
+    var h = 2166136261;
+    for (var i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0);
+  }
+  function pkgColor(pkg){
+    var h = hashStr(pkg);
+    return 'hsl(' + (h % 360) + ',62%,58%)';
+  }
+
+  // Degree is computed once over the full graph (independent of the isolated-node
+  // toggle below) so hiding zero-degree nodes never changes an in/out count.
+  var byIdAll = {};
+  data.nodes.forEach(function(n){ byIdAll[n.id] = n; });
+  var allLinks = data.links.filter(function(l){ return byIdAll[l.s] && byIdAll[l.t]; }).map(function(l){
+    return Object.assign({}, l, {phase: (hashStr(l.s + l.t) % 1000) / 1000});
+  });
+  var degree = {};
+  allLinks.forEach(function(l){
+    degree[l.s] = degree[l.s] || {in: 0, out: 0};
+    degree[l.t] = degree[l.t] || {in: 0, out: 0};
+    degree[l.s].out++;
+    degree[l.t].in++;
+  });
+  var isolatedIds = {}, isolatedCount = 0;
+  data.nodes.forEach(function(n){
+    var d = degree[n.id];
+    if (!d || (d.in === 0 && d.out === 0)){ isolatedIds[n.id] = true; isolatedCount++; }
+  });
+
+  function nodeRadius(n){
+    if (n.kind === 'service' || n.kind === 'entry') return 15;
+    if (n.kind === 'dir') return Math.max(6, Math.min(20, 5 + Math.sqrt(n.file_count || 1) * 3));
+    return Math.max(3, Math.min(14, 3 + Math.sqrt(n.loc || 1) * 0.55));
+  }
+  function nodeFill(n){
+    if (n.kind === 'service' || n.kind === 'entry') return n.color;
+    return pkgColor(n.pkg);
+  }
+
+  // ── Force simulation: O(n^2) repulsion + spring edges + centering. n is
+  // capped (file cap / directory aggregation upstream), so this stays cheap. ──
+  var nodes, links, byId, alpha, view = {x: 0, y: 0, scale: 1};
+  function tick(){
+    var n = nodes.length;
+    for (var i = 0; i < n; i++){
+      var a = nodes[i];
+      if (a.fixed) continue;
+      var fx = -a.x * 0.004, fy = -a.y * 0.004; // gentle centering
+      for (var j = 0; j < n; j++){
+        if (i === j) continue;
+        var b = nodes[j];
+        var dx = a.x - b.x, dy = a.y - b.y;
+        var d2 = dx*dx + dy*dy + 0.01;
+        var f = 1400 / d2;
+        fx += dx * f; fy += dy * f;
+      }
+      a.vx = (a.vx + fx * alpha) * 0.82;
+      a.vy = (a.vy + fy * alpha) * 0.82;
+    }
+    links.forEach(function(l){
+      var s = byId[l.s], t = byId[l.t];
+      var dx = t.x - s.x, dy = t.y - s.y;
+      var dist = Math.sqrt(dx*dx + dy*dy) || 1;
+      var target = 90;
+      var f = (dist - target) * 0.012 * alpha;
+      var ux = dx / dist, uy = dy / dist;
+      if (!s.fixed){ s.vx += ux * f; s.vy += uy * f; }
+      if (!t.fixed){ t.vx -= ux * f; t.vy -= uy * f; }
+    });
+    nodes.forEach(function(a){
+      if (a.fixed) return;
+      // Clamp per-tick speed: near-coincident starting positions push d2 toward
+      // its floor and the 1400/d2 repulsion term spikes, which without this cap
+      // throws nodes to thousands of units away and off the visible canvas.
+      var speed = Math.sqrt(a.vx * a.vx + a.vy * a.vy), maxSpeed = 40;
+      if (speed > maxSpeed){ a.vx *= maxSpeed / speed; a.vy *= maxSpeed / speed; }
+      a.x += a.vx; a.y += a.vy;
+    });
+    alpha = Math.max(0.02, alpha * 0.985);
+  }
+
+  // Fit the view to wherever the settled layout actually landed, rather than
+  // assuming it fits a {x:0,y:0,scale:1} viewport — the settled bounding box
+  // scales with node count and link topology, not a fixed canvas size.
+  function fitView(){
+    var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    nodes.forEach(function(n){
+      if (n.x < minX) minX = n.x; if (n.x > maxX) maxX = n.x;
+      if (n.y < minY) minY = n.y; if (n.y > maxY) maxY = n.y;
+    });
+    var w = Math.max(1, maxX - minX), h = Math.max(1, maxY - minY);
+    var r = canvas.getBoundingClientRect();
+    var cw = r.width || 800, ch = r.height || 500;
+    var scale = Math.min(1.4, Math.max(0.06, Math.min(cw / w, ch / h) * 0.85));
+    var cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+    view = {x: -cx * scale, y: -cy * scale, scale: scale};
+  }
+
+  var selected = null, hovered = null, searchMatch = null;
+
+  // Rebuilds the node/link set (optionally excluding zero-degree nodes), re-settles
+  // the force layout from fresh hashed starting positions, and re-fits the view —
+  // used both for the initial paint and whenever the "hide isolated" toggle changes.
+  function buildLayout(hideIsolated){
+    var visible = hideIsolated ? data.nodes.filter(function(n){ return !isolatedIds[n.id]; }) : data.nodes;
+    nodes = visible.map(function(n){
+      var h1 = hashStr(n.id), h2 = hashStr(n.id + ':r');
+      var angle = (h1 % 6283) / 1000;
+      var radius = 60 + (h2 % 260);
+      return Object.assign({}, n, {
+        x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, vx: 0, vy: 0, fixed: false,
+      });
+    });
+    byId = {};
+    nodes.forEach(function(n){ byId[n.id] = n; });
+    links = allLinks.filter(function(l){ return byId[l.s] && byId[l.t]; });
+    alpha = 1;
+    for (var i = 0; i < 220; i++) tick(); // settle to a deterministic resting layout before first paint
+    fitView();
+    selected = null; hovered = null; searchMatch = null;
+  }
+
+  var hideIsolatedEl = document.getElementById('graph-hide-isolated');
+  var isolatedCountEl = document.getElementById('graph-isolated-count');
+  var hideIsolatedWrapEl = document.getElementById('graph-hide-isolated-wrap');
+  if (isolatedCountEl) isolatedCountEl.textContent = isolatedCount ? ' (' + isolatedCount + ')' : '';
+  if (!isolatedCount && hideIsolatedWrapEl) hideIsolatedWrapEl.style.display = 'none';
+  if (hideIsolatedEl) hideIsolatedEl.checked = isolatedCount > 0;
+  buildLayout(hideIsolatedEl ? hideIsolatedEl.checked : false);
+  if (hideIsolatedEl) hideIsolatedEl.addEventListener('change', function(){
+    dragging = null; panStart = null; moved = false;
+    buildLayout(hideIsolatedEl.checked);
+  });
+  var resetViewEl = document.getElementById('graph-reset-view');
+  if (resetViewEl) resetViewEl.addEventListener('click', function(){ fitView(); });
+
+  function worldToScreen(x, y){
+    var r = canvas.getBoundingClientRect();
+    return [r.width/2 + view.x + x * view.scale, r.height/2 + view.y + y * view.scale];
+  }
+  function screenToWorld(sx, sy){
+    var r = canvas.getBoundingClientRect();
+    return [(sx - r.width/2 - view.x) / view.scale, (sy - r.height/2 - view.y) / view.scale];
+  }
+
+  function related(id){
+    var set = {};
+    set[id] = true;
+    links.forEach(function(l){
+      if (l.s === id) set[l.t] = true;
+      if (l.t === id) set[l.s] = true;
+    });
+    return set;
+  }
+
+  var cs = getComputedStyle(document.documentElement);
+  var colors = {};
+  function refreshColors(){
+    cs = getComputedStyle(document.documentElement);
+    colors.text = cs.getPropertyValue('--text').trim() || '#f1f5f9';
+    colors.muted = cs.getPropertyValue('--muted').trim() || '#64748b';
+    colors.edge = cs.getPropertyValue('--border2').trim() || '#334155';
+    colors.bg = cs.getPropertyValue('--bg3').trim() || '#161e2e';
+  }
+  refreshColors();
+  document.addEventListener('theme-changed', refreshColors);
+
+  var particleSpeed = 0.00025;
+  var lastT = null;
+
+  function draw(t){
+    if (lastT === null) lastT = t;
+    var dt = t - lastT; lastT = t;
+    var r = canvas.getBoundingClientRect();
+    if (canvas.width !== Math.round(r.width * devicePixelRatio)){
+      canvas.width = r.width * devicePixelRatio;
+      canvas.height = r.height * devicePixelRatio;
+    }
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    ctx.clearRect(0, 0, r.width, r.height);
+
+    var highlightSet = selected ? related(selected) : (searchMatch || null);
+
+    links.forEach(function(l){
+      var s = byId[l.s], t2 = byId[l.t];
+      var p1 = worldToScreen(s.x, s.y), p2 = worldToScreen(t2.x, t2.y);
+      var dim = highlightSet && !(highlightSet[l.s] && highlightSet[l.t]);
+      ctx.beginPath();
+      ctx.moveTo(p1[0], p1[1]);
+      ctx.lineTo(p2[0], p2[1]);
+      ctx.strokeStyle = colors.edge;
+      ctx.globalAlpha = dim ? 0.08 : (l.kind === 'service' ? 0.55 : 0.35);
+      ctx.lineWidth = Math.min(2.5, 0.6 + (l.w || 1) * 0.15);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      if (!reduceMotion && !dim){
+        if (!l._phase) l._phase = l.phase;
+        // Real observed-traffic weight (from --access-log) speeds the
+        // particle up (log-scaled — raw request counts span orders of
+        // magnitude); unweighted edges just show dependency direction.
+        var hasTraffic = l.kind === 'entry' && l.w;
+        var speedMul = hasTraffic ? Math.min(5, 1 + Math.log2(l.w + 1) * 0.5) : 1;
+        l._phase = (l._phase + dt * particleSpeed * speedMul) % 1;
+        [l._phase, (l._phase + 0.5) % 1].forEach(function(ph){
+          var px = p1[0] + (p2[0]-p1[0]) * ph, py = p1[1] + (p2[1]-p1[1]) * ph;
+          ctx.beginPath();
+          ctx.arc(px, py, 1.8, 0, 7);
+          ctx.fillStyle = hasTraffic ? '#f59e0b' : (l.kind === 'service' ? '#60a5fa' : colors.muted);
+          ctx.globalAlpha = 0.9;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        });
+      }
+    });
+
+    nodes.forEach(function(n){
+      var p = worldToScreen(n.x, n.y);
+      var rad = nodeRadius(n) * Math.max(0.6, Math.min(1.4, view.scale));
+      var dim = highlightSet && !highlightSet[n.id];
+      ctx.globalAlpha = dim ? 0.15 : 1;
+      ctx.beginPath();
+      if (n.kind === 'service' || n.kind === 'entry'){
+        var s2 = rad * 1.5;
+        ctx.fillStyle = nodeFill(n);
+        ctx.strokeStyle = colors.bg;
+        ctx.lineWidth = 2;
+        ctx.roundRect ? ctx.roundRect(p[0]-s2/2, p[1]-s2/2, s2, s2, 4) : ctx.rect(p[0]-s2/2, p[1]-s2/2, s2, s2);
+        ctx.fill(); ctx.stroke();
+      } else {
+        ctx.arc(p[0], p[1], rad, 0, 7);
+        ctx.fillStyle = nodeFill(n);
+        ctx.fill();
+      }
+      var showLabel = n.kind !== 'file' || view.scale > 1.6 || n.id === hovered || (highlightSet && highlightSet[n.id]);
+      if (showLabel && !dim){
+        ctx.font = (n.kind === 'service' || n.kind === 'entry' ? '600 ' : '') + '10px system-ui,sans-serif';
+        ctx.fillStyle = colors.text;
+        ctx.fillText((n.icon ? n.icon + ' ' : '') + n.label, p[0] + rad + 4, p[1] + 3);
+      }
+      ctx.globalAlpha = 1;
+    });
+
+    if (alpha > 0.03){ tick(); }
+    if (running) requestAnimationFrame(draw);
+  }
+
+  // ── Interaction: wheel zoom (cursor-anchored), drag pan/move, click select ──
+  var dragging = null, panStart = null, moved = false;
+  canvas.addEventListener('wheel', function(e){
+    e.preventDefault();
+    var r = canvas.getBoundingClientRect();
+    var mx = e.clientX - r.left, my = e.clientY - r.top;
+    var before = screenToWorld(mx, my);
+    var factor = Math.exp(-e.deltaY * 0.001);
+    // Floor matches fitView's floor (0.06) so wheel zoom-out can always reach back to,
+    // or past, the initial auto-fit scale — a stricter floor here would leave large
+    // graphs permanently more zoomed-in than their starting view with no way back.
+    view.scale = Math.max(0.05, Math.min(6, view.scale * factor));
+    var after = worldToScreen(before[0], before[1]);
+    view.x += mx - after[0]; view.y += my - after[1];
+  }, {passive: false});
+
+  function pick(mx, my){
+    var w = screenToWorld(mx, my);
+    var best = null, bestD = 1e9;
+    nodes.forEach(function(n){
+      var d = Math.hypot(n.x - w[0], n.y - w[1]);
+      var rad = nodeRadius(n) + 3;
+      if (d < rad && d < bestD){ best = n; bestD = d; }
+    });
+    return best;
+  }
+
+  canvas.addEventListener('mousedown', function(e){
+    var r = canvas.getBoundingClientRect();
+    var mx = e.clientX - r.left, my = e.clientY - r.top;
+    var hit = pick(mx, my);
+    moved = false;
+    if (hit){ dragging = hit; hit.fixed = true; }
+    else { panStart = {x: e.clientX - view.x, y: e.clientY - view.y}; }
+  });
+  window.addEventListener('mousemove', function(e){
+    var r = canvas.getBoundingClientRect();
+    var mx = e.clientX - r.left, my = e.clientY - r.top;
+    if (dragging){
+      moved = true;
+      var w = screenToWorld(mx, my);
+      dragging.x = w[0]; dragging.y = w[1];
+      alpha = Math.max(alpha, 0.3);
+      tooltip.style.display = 'none';
+    } else if (panStart){
+      moved = true;
+      tooltip.style.display = 'none';
+      view.x = e.clientX - panStart.x; view.y = e.clientY - panStart.y;
+    } else {
+      var hit = pick(mx, my);
+      hovered = hit ? hit.id : null;
+      canvas.style.cursor = hit ? 'pointer' : 'grab';
+      if (hit){
+        var deg = degree[hit.id] || {in: 0, out: 0};
+        var metaBits = [];
+        if (hit.kind === 'file') metaBits.push(hit.loc + ' line' + (hit.loc === 1 ? '' : 's'));
+        if (hit.kind === 'dir') metaBits.push(hit.file_count + ' file' + (hit.file_count === 1 ? '' : 's') + ' aggregated', hit.loc + ' total lines');
+        metaBits.push(deg.in + ' in \u2192 node \u2192 ' + deg.out + ' out');
+        tooltip.innerHTML = '<div class="tt-path">' + (hit.icon ? hit.icon + ' ' : '') + hit.id + '</div>'
+          + '<div class="tt-meta">' + metaBits.join(' \u00b7 ') + '</div>';
+        tooltip.style.display = 'block';
+        var flip = mx > r.width * 0.6;
+        tooltip.style.left = (flip ? mx - 14 : mx + 14) + 'px';
+        tooltip.style.top = (my + 16) + 'px';
+        tooltip.style.transform = flip ? 'translateX(-100%)' : '';
+      } else {
+        tooltip.style.display = 'none';
+      }
+    }
+  });
+  window.addEventListener('mouseup', function(){
+    if (dragging) dragging.fixed = false;
+    dragging = null; panStart = null;
+  });
+  canvas.addEventListener('mouseleave', function(){
+    hovered = null;
+    tooltip.style.display = 'none';
+  });
+  canvas.addEventListener('click', function(e){
+    if (moved) return;
+    var r = canvas.getBoundingClientRect();
+    var hit = pick(e.clientX - r.left, e.clientY - r.top);
+    selected = hit ? (selected === hit.id ? null : hit.id) : null;
+  });
+
+  var search = document.getElementById('graph-search');
+  if (search){
+    search.addEventListener('input', function(){
+      var q = search.value.trim().toLowerCase();
+      if (!q){ searchMatch = null; return; }
+      var set = {};
+      nodes.forEach(function(n){ if (n.label.toLowerCase().indexOf(q) !== -1) set[n.id] = true; });
+      searchMatch = set;
+    });
+  }
+
+  var running = false;
+  var obs = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if (en.isIntersecting && !running){ running = true; requestAnimationFrame(draw); }
+      else if (!en.isIntersecting){ running = false; }
+    });
+  }, {threshold: 0.01});
+  obs.observe(wrap);
+  running = true;
+  requestAnimationFrame(draw);
+})();
+</script>
 </body>
 </html>
