@@ -1304,13 +1304,33 @@ GRAPH_JS = """
     });
     nodes.forEach(function(a){
       if (a.fixed) return;
+      // Clamp per-tick speed: near-coincident starting positions push d2 toward
+      // its floor and the 1400/d2 repulsion term spikes, which without this cap
+      // throws nodes to thousands of units away and off the visible canvas.
+      var speed = Math.sqrt(a.vx * a.vx + a.vy * a.vy), maxSpeed = 40;
+      if (speed > maxSpeed){ a.vx *= maxSpeed / speed; a.vy *= maxSpeed / speed; }
       a.x += a.vx; a.y += a.vy;
     });
     alpha = Math.max(0.02, alpha * 0.985);
   }
   for (var i = 0; i < 220; i++) tick(); // settle to a deterministic resting layout before first paint
 
-  var view = {x: 0, y: 0, scale: 1};
+  // Fit the initial view to wherever the settled layout actually landed, rather
+  // than assuming it fits a {x:0,y:0,scale:1} viewport — the settled bounding
+  // box scales with node count and link topology, not a fixed canvas size.
+  var view = (function(){
+    var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    nodes.forEach(function(n){
+      if (n.x < minX) minX = n.x; if (n.x > maxX) maxX = n.x;
+      if (n.y < minY) minY = n.y; if (n.y > maxY) maxY = n.y;
+    });
+    var w = Math.max(1, maxX - minX), h = Math.max(1, maxY - minY);
+    var r = canvas.getBoundingClientRect();
+    var cw = r.width || 800, ch = r.height || 500;
+    var scale = Math.min(1.4, Math.max(0.06, Math.min(cw / w, ch / h) * 0.85));
+    var cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+    return {x: -cx * scale, y: -cy * scale, scale: scale};
+  })();
   var selected = null, hovered = null, searchMatch = null;
 
   function worldToScreen(x, y){
