@@ -11,7 +11,9 @@ and capacity figures are clearly labeled as static-analysis estimates.
 **[Live demo →](https://askuma.github.io/workflow-generator/)** — generated from
 [fastapi/full-stack-fastapi-template](https://github.com/fastapi/full-stack-fastapi-template), unmodified.
 
-![WORKFLOW.html generated for full-stack-fastapi-template](https://raw.githubusercontent.com/askuma/workflow-generator/main/docs/preview.png)
+![Running workflow-generator against fastapi/full-stack-fastapi-template, from pip install to the generated diagram](https://raw.githubusercontent.com/askuma/workflow-generator/main/docs/demo.gif)
+
+*(real CLI output, unscripted — [static screenshot](https://raw.githubusercontent.com/askuma/workflow-generator/main/docs/preview.png) if you'd rather not autoplay)*
 
 ## What it produces
 
