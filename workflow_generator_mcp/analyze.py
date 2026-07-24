@@ -1090,7 +1090,7 @@ background:#60a5fa;box-shadow:0 0 8px 2px #60a5fa,0 0 18px 4px rgba(96,165,250,.
 @media(prefers-reduced-motion:no-preference){
 .arrow-dot{animation:arrowFlow var(--t,4s) linear infinite;
 animation-delay:calc(var(--i,0)/var(--n,1)*var(--t,4s))}
-.arch-boxes{animation:rowPulse var(--t,4s) ease-in-out infinite;
+.arch-boxes{animation:rowPulse var(--t,10s) ease-in-out infinite;
 animation-delay:calc(var(--i,0)/var(--n,1)*var(--t,4s))}
 .step-num::after{animation:stepFlow var(--t,3s) linear infinite;
 animation-delay:calc(var(--i,0)/var(--n,1)*var(--t,3s))}
@@ -1108,6 +1108,31 @@ background:var(--border2);transform:translateX(-50%)}
 .step-num::after{content:'';position:absolute;left:50%;top:-14px;width:5px;height:5px;
 border-radius:50%;background:currentColor;opacity:0;transform:translateX(-50%)}
 @keyframes stepFlow{0%{opacity:0;top:-14px}8%{opacity:1}92%{top:0;opacity:1}100%{opacity:0}}
+/* Guided tour */
+.tour-overlay{position:fixed;inset:0;z-index:30;background:transparent}
+.tour-spot{position:absolute;z-index:31;border-radius:12px;pointer-events:none;
+box-shadow:0 0 0 9999px rgba(0,0,0,.6);transition:top .35s ease,left .35s ease,width .35s ease,height .35s ease}
+:root[data-theme="light"] .tour-spot{box-shadow:0 0 0 9999px rgba(15,23,42,.45)}
+.tour-card{position:absolute;z-index:32;width:320px;max-width:calc(100vw - 32px);
+background:var(--bg3);border:1px solid var(--border2);border-radius:12px;padding:16px 18px;
+box-shadow:0 8px 30px rgba(0,0,0,.4);transition:top .35s ease,left .35s ease;font-family:var(--sans)}
+.tour-card .tour-step-count{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.tour-card .tour-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px}
+.tour-card .tour-body{font-size:12.5px;line-height:1.55;color:var(--muted)}
+.tour-card .tour-close{position:absolute;top:10px;right:12px;cursor:pointer;color:var(--muted);
+font-size:16px;line-height:1;background:none;border:none;font-family:var(--sans)}
+.tour-card .tour-close:hover{color:var(--text)}
+.tour-card .tour-controls{display:flex;align-items:center;justify-content:space-between;margin-top:14px}
+.tour-card .tour-skip{background:none;border:none;color:var(--muted);font-size:11.5px;cursor:pointer;
+font-family:var(--sans);padding:0;text-decoration:underline}
+.tour-card .tour-skip:hover{color:var(--text)}
+.tour-card .tour-nav{display:flex;gap:8px}
+.tour-card .tour-btn{background:var(--bg2);border:1px solid var(--border);border-radius:6px;
+padding:6px 14px;font-size:11.5px;color:var(--text);cursor:pointer;font-family:var(--sans)}
+.tour-card .tour-btn:hover{border-color:var(--border2)}
+.tour-card .tour-btn.primary{background:#3b82f6;border-color:#3b82f6;color:#fff}
+.tour-card .tour-btn.primary:hover{background:#2563eb;border-color:#2563eb}
+.tour-card .tour-btn:disabled{opacity:.4;cursor:default}
 """
 
 EDGE_JS = """
@@ -1460,15 +1485,38 @@ GRAPH_JS = """
       var p = worldToScreen(n.x, n.y);
       var rad = nodeRadius(n) * Math.max(0.6, Math.min(1.4, view.scale));
       var dim = highlightSet && !highlightSet[n.id];
+      var pulsing = n.kind === 'entry' && pulseUntil !== null && t < pulseUntil && !dim;
+      if (pulsing){
+        // Radar-ping ring: expands outward and fades, repeating on a ~1.3s cycle
+        // until pulseUntil, so the entry node reads as "start here" on first view.
+        // Stroked in colors.text (not n.color) because it's the one color guaranteed
+        // to contrast against the canvas background in both themes -- a translucent
+        // green ring reads fine on a near-black canvas but washes out on a near-white one.
+        var fadeOut = Math.min(1, (pulseUntil - t) / 900);
+        var cyclePos = (t % 1300) / 1300;
+        var ringR = rad * (1.6 + cyclePos * 2.2);
+        ctx.beginPath();
+        ctx.arc(p[0], p[1], ringR, 0, 7);
+        ctx.strokeStyle = colors.text;
+        ctx.lineWidth = 2.5;
+        ctx.globalAlpha = (0.85 - cyclePos * 0.55) * fadeOut;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
       ctx.globalAlpha = dim ? 0.15 : 1;
       ctx.beginPath();
       if (n.kind === 'service' || n.kind === 'entry'){
         var s2 = rad * 1.5;
+        if (pulsing){
+          ctx.shadowColor = colors.text;
+          ctx.shadowBlur = 12 + 6 * Math.sin(t / 180);
+        }
         ctx.fillStyle = nodeFill(n);
         ctx.strokeStyle = colors.bg;
         ctx.lineWidth = 2;
         ctx.roundRect ? ctx.roundRect(p[0]-s2/2, p[1]-s2/2, s2, s2, 4) : ctx.rect(p[0]-s2/2, p[1]-s2/2, s2, s2);
         ctx.fill(); ctx.stroke();
+        if (pulsing) ctx.shadowBlur = 0;
       } else {
         ctx.arc(p[0], p[1], rad, 0, 7);
         ctx.fillStyle = nodeFill(n);
@@ -1584,15 +1632,188 @@ GRAPH_JS = """
   }
 
   var running = false;
+  var pulseUntil = null;
+  var graphVisible = false;
+  function armPulseIfReady(){
+    // Only ever arms once, the first time the graph is actually visible AND
+    // interactive -- if the guided tour is still running, its overlay blocks
+    // clicks on the entry node, so arming here would burn the pulse while the
+    // user literally can't act on it. Re-tried on graph visibility changes and
+    // again the moment the tour ends (see wfgen-tour-end listener below).
+    if (pulseUntil === null && !reduceMotion && graphVisible && !window.__wfgenTourActive){
+      pulseUntil = performance.now() + 10000;
+    }
+  }
   var obs = new IntersectionObserver(function(entries){
     entries.forEach(function(en){
-      if (en.isIntersecting && !running){ running = true; requestAnimationFrame(draw); }
-      else if (!en.isIntersecting){ running = false; }
+      graphVisible = en.isIntersecting;
+      if (en.isIntersecting){
+        if (!running){ running = true; requestAnimationFrame(draw); }
+        armPulseIfReady();
+      } else {
+        running = false;
+      }
     });
   }, {threshold: 0.01});
   obs.observe(wrap);
+  document.addEventListener('wfgen-tour-end', armPulseIfReady);
   running = true;
   requestAnimationFrame(draw);
+})();
+"""
+
+TOUR_JS = """
+(function(){
+  var STORAGE_KEY = 'wfgen_tour_v1_dismissed';
+  var steps = [
+    {sel: '.stat-row', title: 'Capacity stats', body: "These are modeled estimates, not measurements. Expand \\u201cHow was Modeled Throughput computed?\\u201d below for the exact math, or run the generated k6 script against a real deploy to check them."},
+    {sel: '#tour-derivation', title: 'Where the numbers come from', body: 'Every number above traces back to something concrete \\u2014 worker count \\u00d7 per-worker concurrency, ranked against whichever constraint is tightest. Click either panel for the full derivation or a ready-to-run load test.'},
+    {sel: '#section-graph', title: 'Codebase graph', body: 'Every node is a real file; every edge is an actual import or a pattern-confirmed service call \\u2014 not a guess. Drag to pan, scroll to zoom, click a node to isolate its connections, or search by name.'},
+    {sel: '#section-architecture', title: 'Architecture diagram', body: 'Solid boxes are confirmed in your source code; dashed boxes are declared in a manifest but never matched to real usage.'},
+    {sel: '#section-flows', title: 'Data flow paths', body: 'Each card animates a real request path \\u2014 write, read, background jobs \\u2014 inferred from what was actually detected.'},
+    {sel: '#section-concurrency', title: 'Concurrency model', body: "Layer-by-layer: what model each component uses, its ceiling, and what's actually limiting it."},
+    {sel: '#section-bottlenecks', title: 'Bottleneck analysis', body: 'Ranked from what saturates first (CRITICAL) to least pressing (LOW), each with a concrete mitigation.'},
+    {sel: '#theme-toggle', title: 'One more thing', body: 'Toggle light/dark mode anytime. That\\u2019s the tour \\u2014 click the ? button to see it again.'}
+  ];
+
+  var active = [];
+  var cur = -1;
+  var overlay, spot, card;
+
+  function storageGet(){
+    try { return localStorage.getItem(STORAGE_KEY); } catch (e) { return null; }
+  }
+  function storageSet(){
+    try { localStorage.setItem(STORAGE_KEY, '1'); } catch (e) {}
+  }
+
+  function resolveSteps(){
+    return steps
+      .map(function(s){ return {def: s, el: document.querySelector(s.sel)}; })
+      .filter(function(s){
+        if (!s.el) return false;
+        var r = s.el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      });
+  }
+
+  function buildUI(){
+    overlay = document.createElement('div');
+    overlay.className = 'tour-overlay';
+    spot = document.createElement('div');
+    spot.className = 'tour-spot';
+    card = document.createElement('div');
+    card.className = 'tour-card';
+    card.innerHTML =
+      '<button class="tour-close" aria-label="Close tour">\\u00d7</button>' +
+      '<div class="tour-step-count"></div>' +
+      '<div class="tour-title"></div>' +
+      '<div class="tour-body"></div>' +
+      '<div class="tour-controls">' +
+      '<button class="tour-skip">Skip tour</button>' +
+      '<div class="tour-nav"><button class="tour-btn tour-back">Back</button><button class="tour-btn primary tour-next">Next</button></div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    document.body.appendChild(spot);
+    document.body.appendChild(card);
+
+    card.querySelector('.tour-close').addEventListener('click', endTour);
+    card.querySelector('.tour-skip').addEventListener('click', endTour);
+    card.querySelector('.tour-back').addEventListener('click', function(){ go(cur - 1); });
+    card.querySelector('.tour-next').addEventListener('click', function(){
+      if (cur >= active.length - 1) { endTour(); } else { go(cur + 1); }
+    });
+    document.addEventListener('keydown', function(e){
+      if (!overlay || overlay.style.display === 'none') return;
+      if (e.key === 'Escape') endTour();
+    });
+    window.addEventListener('resize', function(){
+      if (cur >= 0 && cur < active.length) position(active[cur].el);
+    });
+  }
+
+  function position(el){
+    var r = el.getBoundingClientRect();
+    var pad = 8;
+    var top = r.top + window.scrollY - pad;
+    var left = r.left + window.scrollX - pad;
+    var width = r.width + pad * 2;
+    var height = r.height + pad * 2;
+    spot.style.top = top + 'px';
+    spot.style.left = left + 'px';
+    spot.style.width = width + 'px';
+    spot.style.height = height + 'px';
+
+    var cardWidth = 320;
+    var viewportH = window.innerHeight;
+    var margin = 16;
+    var oversized = r.height > viewportH - 2 * margin;
+    var cardTop, cardLeft;
+    if (oversized) {
+      cardTop = window.scrollY + viewportH - margin;
+      card.style.transform = 'translateY(-100%)';
+    } else {
+      var spaceBelow = viewportH - r.bottom;
+      var placeBelow = spaceBelow > 200 || spaceBelow > r.top;
+      if (placeBelow) {
+        cardTop = top + height + 12;
+        card.style.transform = 'none';
+      } else {
+        cardTop = top - 12;
+        card.style.transform = 'translateY(-100%)';
+      }
+    }
+    cardLeft = Math.min(Math.max(left, margin), window.scrollX + document.documentElement.clientWidth - cardWidth - margin);
+    card.style.top = cardTop + 'px';
+    card.style.left = cardLeft + 'px';
+  }
+
+  function go(i){
+    if (i < 0 || i >= active.length) return;
+    cur = i;
+    var step = active[i];
+    step.el.scrollIntoView({block: 'center', behavior: 'smooth'});
+    card.querySelector('.tour-step-count').textContent = (i + 1) + ' / ' + active.length;
+    card.querySelector('.tour-title').textContent = step.def.title;
+    card.querySelector('.tour-body').textContent = step.def.body;
+    card.querySelector('.tour-back').disabled = (i === 0);
+    card.querySelector('.tour-next').textContent = (i === active.length - 1) ? 'Done' : 'Next';
+    setTimeout(function(){ position(step.el); }, 350);
+  }
+
+  function startTour(){
+    active = resolveSteps();
+    if (!active.length) return;
+    if (!overlay) buildUI();
+    overlay.style.display = 'block';
+    spot.style.display = 'block';
+    card.style.display = 'block';
+    window.__wfgenTourActive = true;
+    go(0);
+  }
+
+  function endTour(){
+    storageSet();
+    if (overlay) overlay.style.display = 'none';
+    if (spot) spot.style.display = 'none';
+    if (card) card.style.display = 'none';
+    cur = -1;
+    window.__wfgenTourActive = false;
+    document.dispatchEvent(new Event('wfgen-tour-end'));
+  }
+
+  var restartBtn = document.getElementById('tour-restart');
+  if (restartBtn) restartBtn.addEventListener('click', startTour);
+
+  if (!storageGet()) {
+    // Reserve this now, not inside the delayed startTour() call: the graph's
+    // IntersectionObserver fires its first check within a frame or two of
+    // load, well before this 700ms delay elapses, and if the graph section
+    // happens to already be in the initial viewport it would otherwise arm
+    // the entry-node pulse before the tour visibly starts.
+    window.__wfgenTourActive = true;
+    setTimeout(startTour, 700);
+  }
 })();
 """
 
@@ -2053,7 +2274,7 @@ faster. Treat this number as a starting estimate, not a capacity guarantee.</div
             " This is <b>static analysis, not live monitoring</b> — particle motion shows dependency direction (importer → imported), not request traffic. Pass <code>--access-log &lt;path&gt;</code> to overlay real per-route request counts instead."
         )
         graph_section = f"""
-<div class="section">
+<div class="section" id="section-graph">
 <div class="section-title">Codebase Graph — {graph_note} · {gm['links']} real connections</div>
 <p style="font-size:11px;color:var(--muted);margin:-4px 0 16px">Every node is a real file{' or directory' if gm['aggregated'] else ''} in this repo; every line is an actual import statement, or a pattern-confirmed service call scanned per-file (the same signal behind the summary below, localized to its source).{traffic_note} Drag a node, scroll to zoom, click to isolate its connections, or search below.</p>
 <div class="graph-wrap">
@@ -2094,15 +2315,16 @@ faster. Treat this number as a starting estimate, not a capacity guarantee.</div
 </head>
 <body>
 <button id="theme-toggle" class="theme-toggle" aria-label="Toggle light/dark theme" title="Toggle theme">&#9728;&#65039;</button>
+<button id="tour-restart" class="theme-toggle" style="right:72px" aria-label="Take the guided tour" title="Take the guided tour">?</button>
 <div class="page">
 <h1>{project_name} — System Workflow</h1>
 <p class="subtitle">Component communication map · concurrent request capacity · bottleneck analysis · {today}</p>
 
 <div class="stat-row">{stats}</div>
 <p style="font-size:11px;color:var(--muted);margin:-28px 0 20px">Capacity figures are static-analysis estimates (heuristic: ~100 concurrent tasks per async worker), not load-test results.</p>
-{derivation_html}
+<div id="tour-derivation">{derivation_html}</div>
 {graph_section}
-<div class="section">
+<div class="section" id="section-architecture">
 <div class="section-title">Full System Architecture — {component_count} Components</div>
 <p style="font-size:11px;color:var(--muted);margin:-4px 0 16px">Detection is pattern-based static analysis. Dashed boxes are dependencies declared in your manifest but not matched to a usage pattern in source — may be wired through a custom abstraction. Solid boxes are pattern-confirmed in source. A component not shown here isn't confirmed absent from the project — only undetected.</p>
 <div class="arch-wrap">{arch_html}<svg id="edge-overlay"></svg><script type="application/json" id="edges-data">{edges_json}</script></div>
@@ -2110,17 +2332,17 @@ faster. Treat this number as a starting estimate, not a capacity guarantee.</div
 {route_html}
 </div>
 
-<div class="section">
+<div class="section" id="section-flows">
 <div class="section-title">Data Flow Paths — Step by Step</div>
 <div class="flows">{flow_html}</div>
 </div>
 
-<div class="section">
+<div class="section" id="section-concurrency">
 <div class="section-title">Concurrency Model — Layer by Layer</div>
 {table_html}
 </div>
 
-<div class="section">
+<div class="section" id="section-bottlenecks">
 <div class="section-title">Bottleneck Analysis — Where the System Saturates First</div>
 {bn_html}
 </div>
@@ -2129,6 +2351,7 @@ faster. Treat this number as a starting estimate, not a capacity guarantee.</div
 </div>
 <script>{EDGE_JS}</script>
 <script>{GRAPH_JS}</script>
+<script>{TOUR_JS}</script>
 </body>
 </html>"""
 

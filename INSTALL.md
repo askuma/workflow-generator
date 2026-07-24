@@ -225,3 +225,5 @@ Every generated `WORKFLOW.html` includes:
 6. **Codebase dependency graph** — force-directed module/import graph across all detected
    languages; click a node to isolate its neighbors. Import-direction edges by default; pass
    `--access-log` to weight HTTP-entry edges with real observed request counts instead
+7. **Guided tour** — spotlight walkthrough shown automatically on first open, replayable via the
+   `?` button; steps for sections a project doesn't have (no routes, no graph) are skipped
