@@ -27,6 +27,7 @@ Every generated page contains:
 | **Concurrency table** | Every layer: model · ceiling · limiting factor |
 | **Bottleneck analysis** | Ranked CRITICAL → LOW with mitigation notes |
 | **Codebase dependency graph** | Force-directed module/import graph — click a node to isolate its neighbors, hover for file details. Import-direction edges are clearly distinguished from real observed traffic (see below) |
+| **Guided tour** | Spotlight walkthrough of every section, shown automatically the first time a report is opened; replay anytime with the `?` button |
 
 ### Codebase dependency graph
 

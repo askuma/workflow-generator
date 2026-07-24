@@ -128,6 +128,11 @@ The generated `WORKFLOW.html` always contains all of the following:
    HTTP-entry edges are weighted with real observed request counts — the graph is explicit about
    which kind of edge is which so it's never mistaken for a traced request path.
 
+7. **Guided tour** — a spotlight walkthrough that dims the page and steps through each section
+   in turn (Back/Next/Skip), shown automatically the first time a generated report is opened.
+   Steps for sections that don't apply to a given project (e.g. no detected routes, no graph)
+   are skipped automatically. Replayable anytime via the `?` button next to the theme toggle.
+
 ## What the analyzer detects
 
 ### Workers & replicas
