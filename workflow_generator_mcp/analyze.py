@@ -753,6 +753,189 @@ def detect_external_sources(root: Path) -> list:
     return sources
 
 
+# ── Semantic graph detectors (crons, tools, agents, composition-root) ────────
+
+def detect_crons(root: Path) -> list:
+    """Detect scheduled jobs and cron-like tasks."""
+    py_src = _read_all(root, '*.py')
+    yaml_src = _read_all(root, '*.yml') + _read_all(root, '*.yaml')
+    json_src = _read_all(root, '*.json')
+    all_src = py_src + yaml_src + json_src
+    all_src_lower = all_src.lower()
+
+    crons = []
+
+    # Celery beat schedule
+    if re.search(r'@.*\.task|@shared_task|beat_schedule|periodic_task', all_src, re.I):
+        for m in _RE['celery'].finditer(all_src_lower):
+            crons.append({'type': 'celery', 'name': 'Celery Beat', 'detail': 'Periodic tasks'})
+            break
+
+    # APScheduler
+    if re.search(r'APScheduler|BackgroundScheduler|CronTrigger', all_src, re.I):
+        crons.append({'type': 'apscheduler', 'name': 'APScheduler', 'detail': 'Scheduled jobs'})
+
+    # schedule.every()
+    if re.search(r'schedule\.every\(|schedule\.run_', all_src, re.I):
+        crons.append({'type': 'schedule', 'name': 'schedule library', 'detail': 'Simple jobs'})
+
+    # GitHub Actions workflows
+    if 'on: schedule:' in all_src or 'schedule:' in yaml_src:
+        crons.append({'type': 'github_actions', 'name': 'GitHub Actions', 'detail': 'Scheduled workflows'})
+
+    # Docker-compose/K8s CronJob (look for naming patterns)
+    if re.search(r'kind:\s*CronJob|cron[_-]?job|scheduled[_-]?job', yaml_src, re.I):
+        crons.append({'type': 'cronjob', 'name': 'Scheduled Job', 'detail': 'Infrastructure-level scheduling'})
+
+    return crons
+
+
+def detect_tools(root: Path) -> list:
+    """Detect tool/function-calling definitions (OpenAI, Anthropic, LangChain, etc.)."""
+    py_src = _read_all(root, '*.py')
+    js_src = _read_all(root, '*.js') + _read_all(root, '*.ts')
+    all_src = py_src + js_src
+    all_src_lower = all_src.lower()
+
+    tools = []
+
+    # OpenAI function calling
+    if re.search(r'functions\s*=\s*\[|tools\s*=\s*\[|\{.*"type"\s*:\s*"function"', all_src, re.I):
+        if _hinted_search('openai_chat', all_src, all_src_lower):
+            tools.append({'type': 'openai_functions', 'name': 'OpenAI Functions'})
+
+    # Anthropic tool use
+    if re.search(r'tools\s*=\s*\[|"type"\s*:\s*"tool"', all_src, re.I):
+        if _hinted_search('anthropic_chat', all_src, all_src_lower):
+            tools.append({'type': 'anthropic_tools', 'name': 'Anthropic Tools'})
+
+    # LangChain tools
+    if re.search(r'@tool|from langchain.*tools|Tool\(|StructuredTool', all_src, re.I):
+        tools.append({'type': 'langchain_tools', 'name': 'LangChain Tools'})
+
+    # Vercel AI SDK
+    if re.search(r'tool\(\{|tools:\s*\[|createTool', all_src, re.I):
+        if 'vercel' in all_src_lower or '@ai-sdk' in all_src_lower:
+            tools.append({'type': 'vercel_ai_tools', 'name': 'Vercel AI Tools'})
+
+    # CrewAI tools
+    if re.search(r'@tool|from crewai', all_src, re.I):
+        if 'crewai' in all_src_lower:
+            tools.append({'type': 'crewai_tools', 'name': 'CrewAI Tools'})
+
+    return tools
+
+
+def detect_agents(root: Path) -> list:
+    """Detect agent frameworks and agent-framework constructs."""
+    py_src = _read_all(root, '*.py')
+    js_src = _read_all(root, '*.js') + _read_all(root, '*.ts')
+    all_src = py_src + js_src
+    all_src_lower = all_src.lower()
+
+    agents = []
+
+    # LangChain AgentExecutor / agent pool
+    if re.search(r'AgentExecutor|create_.*_agent|agent=|from langchain.*agent', all_src, re.I):
+        agents.append({'type': 'langchain_agent', 'name': 'LangChain Agent', 'framework': 'LangChain'})
+
+    # CrewAI agents
+    if re.search(r'class.*Agent|Agent\(|from crewai', all_src, re.I):
+        if 'crewai' in all_src_lower:
+            agents.append({'type': 'crewai_agent', 'name': 'CrewAI Agent', 'framework': 'CrewAI'})
+
+    # AutoGen
+    if re.search(r'ConversableAgent|UserProxyAgent|from autogen', all_src, re.I):
+        agents.append({'type': 'autogen_agent', 'name': 'AutoGen Agent', 'framework': 'AutoGen'})
+
+    # LlamaIndex agent
+    if re.search(r'AgentRunner|OpenAIAgent|from llama_index.*agent', all_src, re.I):
+        agents.append({'type': 'llamaindex_agent', 'name': 'LlamaIndex Agent', 'framework': 'LlamaIndex'})
+
+    # OpenAI Assistants API
+    if re.search(r'client\.beta\.assistants|Assistant\(|thread', all_src, re.I):
+        if _hinted_search('openai_chat', all_src, all_src_lower):
+            agents.append({'type': 'openai_assistant', 'name': 'OpenAI Assistant', 'framework': 'OpenAI'})
+
+    return agents
+
+
+def detect_composition_root(root: Path) -> dict | None:
+    """Detect where the framework app is constructed (FastAPI, Flask, Express, etc.)."""
+    py_files = list(root.rglob('*.py'))
+    js_files = list(root.rglob('*.js')) + list(root.rglob('*.ts'))
+
+    # Python frameworks
+    for py_file in py_files:
+        try:
+            content = py_file.read_text(errors='ignore')
+        except:
+            continue
+
+        # FastAPI
+        if re.search(r'app\s*=\s*FastAPI\(|from fastapi import FastAPI', content):
+            rel_path = py_file.relative_to(root).as_posix()
+            # Look for middleware/setup in same file
+            has_middleware = bool(re.search(r'app\.add_middleware|app\.middleware|@app\.on_event', content))
+            return {
+                'framework': 'FastAPI',
+                'file': rel_path,
+                'has_middleware': has_middleware,
+                'detail': 'FastAPI application'
+            }
+
+        # Flask
+        if re.search(r'app\s*=\s*Flask\(|from flask import Flask', content):
+            rel_path = py_file.relative_to(root).as_posix()
+            has_middleware = bool(re.search(r'app\.before_request|app\.after_request|@app\.before_|@app\.teardown_', content))
+            return {
+                'framework': 'Flask',
+                'file': rel_path,
+                'has_middleware': has_middleware,
+                'detail': 'Flask application'
+            }
+
+        # Django (settings.py or wsgi.py)
+        if 'settings.py' in py_file.name and re.search(r'INSTALLED_APPS|MIDDLEWARE', content):
+            rel_path = py_file.relative_to(root).as_posix()
+            return {
+                'framework': 'Django',
+                'file': rel_path,
+                'has_middleware': True,
+                'detail': 'Django settings'
+            }
+
+    # JavaScript/Node frameworks
+    for js_file in js_files:
+        try:
+            content = js_file.read_text(errors='ignore')
+        except:
+            continue
+
+        # Express
+        if re.search(r'const app\s*=\s*express\(\)|const app\s*=\s*require.*express', content):
+            rel_path = js_file.relative_to(root).as_posix()
+            has_middleware = bool(re.search(r'app\.use\(|app\.middleware', content))
+            return {
+                'framework': 'Express',
+                'file': rel_path,
+                'has_middleware': has_middleware,
+                'detail': 'Express application'
+            }
+
+        # NestJS
+        if re.search(r'@Module|NestFactory|INestApplication', content):
+            rel_path = js_file.relative_to(root).as_posix()
+            return {
+                'framework': 'NestJS',
+                'file': rel_path,
+                'has_middleware': True,
+                'detail': 'NestJS application'
+            }
+
+    return None
+
+
 # ── Concurrency calculation ────────────────────────────────────────────────────
 
 def _rate_str_to_per_min(rate_str: str) -> float | None:
@@ -2130,6 +2313,291 @@ def compute_edges(flows: list, box_names: set) -> list:
     return edges
 
 
+def build_semantic_graph(root: Path, analysis: dict) -> dict:
+    """Build semantic architecture graph from detected components.
+
+    Generates a curated, high-level semantic graph following the foglamp.dev/scan
+    schema: entry points, services, stores, external integrations, agents, models, tools.
+
+    Returns dict with keys: 'project', 'stats', 'topModels', 'topTools', 'topIntegrations', 'graph', 'node_members'
+    node_members maps semantic node IDs to file paths for drill-down filtering.
+    """
+
+    # Project metadata
+    project_name = analysis.get('project_name', 'Project')
+    project_slug = project_name.lower().replace(' ', '-')
+    from datetime import datetime
+    today = datetime.now().strftime('%Y-%m-%d')
+
+    nodes = []
+    edges = []
+    node_members = {}  # Tracks which files belong to each semantic node
+
+    # 1. COMPOSITION ROOT node (if detected)
+    comp_root = analysis.get('composition_root')
+    if comp_root:
+        comp_root_id = 'app-root'
+        nodes.append({
+            'id': comp_root_id,
+            'label': f"{comp_root['framework']} app",
+            'kind': 'service',
+            'sub': 'routing + middleware',
+            'sourceRef': comp_root['file'],
+            'detail': f"Wires all routes and global middleware"
+        })
+        node_members[comp_root_id] = {comp_root['file']}
+    else:
+        comp_root_id = None
+
+    # 2. ENTRY nodes (from routes)
+    api_server = analysis.get('api_server', {})
+    routes = api_server.get('routes', [])
+    entry_nodes = {}
+    route_groups = {}
+
+    for route in routes:
+        # Route is a string like "GET /api/v1/items"
+        parts = route.split(' ', 1)
+        path = parts[1] if len(parts) > 1 else '/'
+        # Group by prefix (e.g., /api/v1/users/* → "users-api")
+        path_parts = path.split('/')
+        prefix = path_parts[2] if len(path_parts) > 2 else 'root'  # Get second component after v1
+        if prefix not in route_groups:
+            group_id = f"{prefix}-api"
+            group_label = f"{prefix.title()} API"
+            entry_nodes[group_id] = {
+                'id': group_id,
+                'label': group_label,
+                'kind': 'entry',
+                'sub': f"/{prefix}/*",
+                'group': prefix.title()
+            }
+            route_groups[prefix] = group_id
+            node_members[group_id] = set()
+
+    # Add entry nodes to graph
+    for ent_id, ent_node in entry_nodes.items():
+        nodes.append(ent_node)
+        # Link composition root to entries
+        if comp_root_id:
+            edges.append({
+                'from': comp_root_id,
+                'to': ent_id,
+                'kind': 'triggers'
+            })
+
+    # 3. SERVICE nodes (inferred from CRUD/utils files, grouped by directory)
+    service_nodes = {}
+    crud_file = None
+    utils_file = None
+
+    # Find key service files
+    for py_file in root.rglob('*.py'):
+        rel = py_file.relative_to(root).as_posix()
+        if 'crud.py' in rel:
+            crud_file = rel
+        elif 'utils.py' in rel and 'app/utils' in rel:
+            utils_file = rel
+
+    # Create service nodes from detected files
+    if crud_file:
+        service_nodes['crud'] = {
+            'id': 'crud-service',
+            'label': 'CRUD service',
+            'kind': 'service',
+            'sub': 'Create/Read/Update/Delete operations',
+            'sourceRef': crud_file,
+            'detail': 'Data access layer for core entities',
+            'group': 'Data'
+        }
+        node_members['crud-service'] = {crud_file}
+
+    if utils_file:
+        service_nodes['utils'] = {
+            'id': 'email-service',
+            'label': 'Email service',
+            'kind': 'service',
+            'sub': 'Email templates + SMTP',
+            'sourceRef': utils_file,
+            'detail': 'Sends password resets and notifications',
+            'group': 'Communication'
+        }
+        node_members['email-service'] = {utils_file}
+
+    # Add service nodes
+    for svc_id, svc_node in service_nodes.items():
+        nodes.append(svc_node)
+        # Link entries to services
+        for entry_id in entry_nodes:
+            edges.append({
+                'from': entry_id,
+                'to': svc_node['id'],
+                'kind': 'calls'
+            })
+
+    # 4. STORE nodes (from detected storage)
+    store_nodes = {}
+    for store_type in analysis.get('storage', []):
+        store_name = store_type.get('name', 'Store')
+        store_id = f"store-{store_name.lower()}"
+        if store_id not in store_nodes:
+            store_nodes[store_id] = {
+                'id': store_id,
+                'label': store_name,
+                'kind': 'store',
+                'domain': store_type.get('domain')
+            }
+            nodes.append(store_nodes[store_id])
+
+    # Link services to stores (reads/writes heuristic)
+    for svc_id, svc_node in service_nodes.items():
+        for store_id in store_nodes:
+            if svc_id == 'crud':  # CRUD writes to DB
+                edges.append({
+                    'from': svc_node['id'],
+                    'to': store_id,
+                    'kind': 'writes'
+                })
+            elif svc_id == 'utils':  # Email service doesn't directly write to DB
+                pass
+
+    # 5. EXTERNAL nodes (from detected integrations)
+    external_nodes = {}
+    for ext in analysis.get('external_sources', []):
+        ext_id = f"external-{ext.get('name', 'service').lower()}"
+        if ext_id not in external_nodes:
+            external_nodes[ext_id] = {
+                'id': ext_id,
+                'label': ext.get('name', 'External'),
+                'kind': 'external',
+                'domain': ext.get('domain')
+            }
+            nodes.append(external_nodes[ext_id])
+
+    # 6. CRON nodes (if detected)
+    cron_nodes = {}
+    for cron in analysis.get('crons', []):
+        cron_id = f"cron-{cron.get('type', 'job')}"
+        if cron_id not in cron_nodes:
+            cron_nodes[cron_id] = {
+                'id': cron_id,
+                'label': cron.get('name', 'Scheduled Job'),
+                'kind': 'cron',
+                'sub': cron.get('detail', 'Periodic task')
+            }
+            nodes.append(cron_nodes[cron_id])
+
+    # Link crons to services
+    for cron_id, cron_node in cron_nodes.items():
+        for svc_id, svc_node in service_nodes.items():
+            edges.append({
+                'from': cron_node['id'],
+                'to': svc_node['id'],
+                'kind': 'triggers'
+            })
+
+    # 7. MODEL nodes (from detected LLMs)
+    model_nodes = {}
+    top_models = []
+    for llm in analysis.get('llm', {}).get('providers', []):
+        model_id = f"model-{llm.lower()}"
+        if model_id not in model_nodes:
+            label_map = {
+                'openai': 'GPT-4',
+                'anthropic': 'Claude',
+                'google': 'Gemini',
+                'cohere': 'Cohere',
+            }
+            label = label_map.get(llm, llm.title())
+            domain_map = {
+                'openai': 'openai.com',
+                'anthropic': 'claude.ai',
+                'google': 'gemini.google.com',
+                'cohere': 'cohere.ai',
+            }
+            model_nodes[model_id] = {
+                'id': model_id,
+                'label': label,
+                'kind': 'model',
+                'domain': domain_map.get(llm)
+            }
+            nodes.append(model_nodes[model_id])
+            if len(top_models) < 3:
+                top_models.append({'id': llm, 'label': label, 'domain': domain_map.get(llm)})
+
+    # 8. TOOL nodes (from detected tools)
+    tool_nodes = {}
+    top_tools = []
+    for tool in analysis.get('tools', []):
+        tool_id = f"tool-{tool.get('type', 'tool')}"
+        if tool_id not in tool_nodes:
+            tool_nodes[tool_id] = {
+                'id': tool_id,
+                'label': tool.get('name', 'Tool'),
+                'kind': 'tool'
+            }
+            nodes.append(tool_nodes[tool_id])
+            if len(top_tools) < 10:
+                top_tools.append({'id': tool.get('type'), 'label': tool.get('name')})
+
+    # 9. AGENT nodes (if detected and have tools)
+    agent_nodes = {}
+    for agent in analysis.get('agents', []):
+        agent_id = f"agent-{agent.get('type', 'agent')}"
+        if agent_id not in agent_nodes and tool_nodes:  # Only create agent if there are tools
+            agent_nodes[agent_id] = {
+                'id': agent_id,
+                'label': agent.get('name', 'Agent'),
+                'kind': 'agent',
+                'sub': agent.get('framework', 'Custom')
+            }
+            nodes.append(agent_nodes[agent_id])
+            # Link agents to models and tools
+            for model_id in model_nodes:
+                edges.append({'from': agent_id, 'to': model_id, 'kind': 'calls'})
+            for tool_id in tool_nodes:
+                edges.append({'from': agent_id, 'to': tool_id, 'kind': 'calls'})
+
+    # 10. Cap enforcement (nodes<=60, edges<=120)
+    if len(nodes) > 60:
+        # Merge smallest components
+        nodes = nodes[:60]
+    if len(edges) > 120:
+        edges = edges[:120]
+
+    # 11. Stats and top items
+    stats = {
+        'agents': len(agent_nodes),
+        'models': len(model_nodes),
+        'tools': len(tool_nodes),
+        'integrations': len(external_nodes)
+    }
+
+    top_integrations = [
+        {'id': ext_id.replace('external-', ''), 'label': nodes[i]['label'], 'domain': nodes[i].get('domain')}
+        for i, nodes_el in enumerate(nodes)
+        if nodes_el['kind'] == 'external'
+    ][:10]
+
+    return {
+        'version': 1,
+        'project': {
+            'name': project_name,
+            'slug': project_slug,
+            'date': today
+        },
+        'stats': stats,
+        'topModels': top_models,
+        'topTools': top_tools,
+        'topIntegrations': top_integrations,
+        'graph': {
+            'nodes': nodes,
+            'edges': edges
+        },
+        'node_members': node_members  # For drill-down filtering
+    }
+
+
 def render_html(analysis: dict, project_name: str) -> str:
     today = datetime.date.today().strftime('%Y-%m-%d')
     cap = analysis['capacity']
@@ -2824,6 +3292,11 @@ def collect(root: Path, graph_detail: str = 'auto', access_log_path: str | None 
     storage = detect_storage(root)
     queues = detect_queues(root)
     external_sources = detect_external_sources(root)
+    # New detectors for semantic graph
+    crons = detect_crons(root)
+    tools = detect_tools(root)
+    agents = detect_agents(root)
+    composition_root = detect_composition_root(root)
     capacity = compute_concurrency(workers, gateway, concur, llm, api_server)
     flows = infer_flows({
         'external_sources': external_sources,
@@ -2841,6 +3314,18 @@ def collect(root: Path, graph_detail: str = 'auto', access_log_path: str | None 
         'llm': llm, 'storage': storage, 'queues': queues, 'external_sources': external_sources,
         'framework': api_server.get('framework'), 'access_log': access_log,
     }, detail=graph_detail)
+    # Build semantic graph for architecture map
+    semantic_graph = build_semantic_graph(root, {
+        'project_name': detect_project_name(root),
+        'api_server': api_server,
+        'storage': storage,
+        'external_sources': external_sources,
+        'crons': crons,
+        'tools': tools,
+        'agents': agents,
+        'composition_root': composition_root,
+        'llm': llm,
+    })
     return {
         'workers': workers,
         'gateway': gateway,
@@ -2851,9 +3336,14 @@ def collect(root: Path, graph_detail: str = 'auto', access_log_path: str | None 
         'storage': storage,
         'queues': queues,
         'external_sources': external_sources,
+        'crons': crons,
+        'tools': tools,
+        'agents': agents,
+        'composition_root': composition_root,
         'capacity': capacity,
         'flows': flows,
         'graph': graph,
+        'semantic_graph': semantic_graph,
         'access_log': access_log,
     }
 
