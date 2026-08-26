@@ -25,6 +25,26 @@ C = {
     'gray':   '#94a3b8', 'gray_d':   '#1a2535',
 }
 
+# ── Known brand domains, for Architecture Map node branding ──────────────────
+# Bundled/static (no network favicon lookups) — matches the names already
+# produced by detect_storage()/detect_external_sources()/detect_llm() etc.
+# Names outside this list simply render without a domain; never guessed.
+_BRAND_DOMAINS = {
+    'PostgreSQL': 'postgresql.org', 'Postgres': 'postgresql.org',
+    'MySQL': 'mysql.com', 'MongoDB': 'mongodb.com', 'SQLite': 'sqlite.org',
+    'Redis': 'redis.io', 'Qdrant': 'qdrant.tech', 'Pinecone': 'pinecone.io',
+    'Weaviate': 'weaviate.io', 'ChromaDB': 'trychroma.com', 'Chroma': 'trychroma.com',
+    'FAISS': 'github.com', 'Milvus': 'milvus.io', 'pgvector': 'postgresql.org',
+    'Celery': 'docs.celeryq.dev', 'BullMQ': 'bullmq.io', 'Kafka': 'kafka.apache.org',
+    'RabbitMQ': 'rabbitmq.com', 'RQ': 'python-rq.org', 'AWS SQS': 'aws.amazon.com',
+    'Jira': 'atlassian.com', 'Azure DevOps': 'azure.microsoft.com', 'Slack': 'slack.com',
+    'GitHub': 'github.com', 'Stripe': 'stripe.com', 'Salesforce': 'salesforce.com',
+    'Twilio': 'twilio.com', 'Sentry': 'sentry.io', 'Traefik': 'traefik.io',
+    'nginx': 'nginx.org', 'Caddy': 'caddyserver.com', 'OpenAI': 'openai.com',
+    'Anthropic': 'claude.ai', 'Cohere': 'cohere.com', 'AWS Bedrock': 'aws.amazon.com',
+    'TruLens': 'trulens.org', 'RAGAS': 'docs.ragas.io', 'LangSmith': 'smith.langchain.com',
+}
+
 # ── Pattern library ───────────────────────────────────────────────────────────
 _RE = {
     # Workers & replicas
@@ -1192,6 +1212,40 @@ border-radius:8px;padding:8px 11px;font-size:11px;color:var(--text);box-shadow:0
 display:none;max-width:320px;line-height:1.5}
 .graph-tooltip .tt-path{font-family:var(--mono);font-weight:600;word-break:break-all}
 .graph-tooltip .tt-meta{color:var(--muted);font-size:10.5px;margin-top:3px}
+.semantic-wrap{position:relative;display:flex;gap:16px;align-items:flex-start}
+.semantic-scroll{flex:1;overflow:auto;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:8px}
+#semantic-canvas{display:block}
+.sem-node-rect{fill:var(--bg2);stroke:var(--border2);stroke-width:1.25;transition:opacity .15s}
+.sem-node{cursor:pointer}
+.sem-node:hover .sem-node-rect{stroke:var(--accent-color,var(--muted))}
+.sem-node.sem-dim{opacity:.28}
+.sem-node-label{font-family:var(--sans);font-size:12.5px;font-weight:600;fill:var(--text)}
+.sem-node-sub{font-family:var(--mono);font-size:10px;fill:var(--muted)}
+.sem-node-kind{font-family:var(--sans);font-size:8.5px;font-weight:700;letter-spacing:.06em}
+.sem-group-tag{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.sem-edge{opacity:.55;transition:opacity .15s,stroke .15s}
+.sem-edge.sem-edge-active{opacity:1;stroke:var(--text)}
+.sem-edge.sem-dim{opacity:.12}
+.sem-edge-label{font-family:var(--sans);font-size:9.5px;fill:var(--muted);text-anchor:middle}
+.semantic-detail-panel{width:280px;flex-shrink:0;background:var(--bg3);border:1px solid var(--border);
+border-radius:12px;padding:16px;position:sticky;top:16px}
+.semantic-detail-panel[hidden]{display:none}
+.sem-detail-close{float:right;background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1}
+.sem-detail-kind{font-size:10px;font-weight:700;letter-spacing:.08em;margin-bottom:6px}
+.sem-detail-label{font-size:15px;font-weight:700;color:var(--text);margin-bottom:2px}
+.sem-detail-sub{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:10px}
+.sem-detail-desc{font-size:12.5px;color:var(--text);line-height:1.5;margin:0 0 10px}
+.sem-detail-ref{font-family:var(--mono);font-size:10.5px;color:var(--muted);word-break:break-all;
+background:var(--bg4);border-radius:6px;padding:6px 8px;margin-bottom:8px}
+.sem-detail-domain{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.sem-detail-btn{margin-top:10px;width:100%;background:var(--bg4);border:1px solid var(--border2);
+color:var(--text);border-radius:8px;padding:9px 10px;font-size:12px;font-weight:600;cursor:pointer;
+font-family:var(--sans)}
+.sem-detail-btn:hover{border-color:var(--muted)}
+.semantic-detail-placeholder{color:var(--muted);font-size:12.5px}
+.sem-legend{display:flex;flex-wrap:wrap;gap:10px 16px;margin-bottom:14px;font-size:11px;color:var(--muted)}
+.sem-legend-item{display:inline-flex;align-items:center;gap:5px}
+.sem-legend-item i{width:8px;height:8px;border-radius:2px;display:inline-block}
 .derivation{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px 18px;margin:0 0 12px}
 .derivation summary{cursor:pointer;font-size:12px;font-weight:600;color:var(--text);list-style:revert}
 .derivation .muted-inline{font-weight:400;color:var(--muted);font-size:11px}
@@ -1814,6 +1868,17 @@ GRAPH_JS = """
     });
   }
 
+  // Hook for the Architecture Map's "Show import details" drill-down: highlights
+  // a given set of file/dir node ids (a semantic component's members) the same
+  // way a search match does, without requiring the user to type anything.
+  window.__wfgenIsolateGraphNodes = function(ids, label){
+    var set = {};
+    (ids || []).forEach(function(id){ set[id] = true; });
+    searchMatch = Object.keys(set).length ? set : null;
+    selected = null;
+    if (search) search.value = label || '';
+  };
+
   var running = false;
   var pulseUntil = null;
   var graphVisible = false;
@@ -1851,6 +1916,7 @@ TOUR_JS = """
   var steps = [
     {sel: '.stat-row', title: 'Capacity stats', body: "These are modeled estimates, not measurements. Expand \\u201cHow was Modeled Throughput computed?\\u201d below for the exact math, or run the generated k6 script against a real deploy to check them."},
     {sel: '#tour-derivation', title: 'Where the numbers come from', body: 'Every number above traces back to something concrete \\u2014 worker count \\u00d7 per-worker concurrency, ranked against whichever constraint is tightest. Click either panel for the full derivation or a ready-to-run load test.'},
+    {sel: '#section-semantic', title: 'Architecture map', body: 'A curated view of how the system actually works \\u2014 entry points, services, datastores, and integrations, grouped by feature. Click any node for details, then \\u201cShow import details\\u201d to jump to the exact files behind it.'},
     {sel: '#section-graph', title: 'Codebase graph', body: 'Every node is a real file; every edge is an actual import or a pattern-confirmed service call \\u2014 not a guess. Drag to pan, scroll to zoom, click a node to isolate its connections, or search by name.'},
     {sel: '#section-architecture', title: 'Architecture diagram', body: 'Solid boxes are confirmed in your source code; dashed boxes are declared in a manifest but never matched to real usage.'},
     {sel: '#section-flows', title: 'Data flow paths', body: 'Each card animates a real request path \\u2014 write, read, background jobs \\u2014 inferred from what was actually detected.'},
@@ -1996,6 +2062,242 @@ TOUR_JS = """
     // the entry-node pulse before the tour visibly starts.
     window.__wfgenTourActive = true;
     setTimeout(startTour, 700);
+  }
+})();
+"""
+
+
+# Semantic Architecture Map renderer. Deterministic column-by-kind layout
+# (not force-directed, unlike GRAPH_JS below): request-flow reads left to
+# right — cron/entry sources, then agent/service logic, then model/tool,
+# then store/external sinks. Nodes sharing a `group` are clustered together
+# within their column and share an accent color, approximating foglamp's
+# "grouped vertical stack" without needing a full cross-column box layout.
+SEMANTIC_GRAPH_JS = """
+(function(){
+  var dataEl = document.getElementById('semantic-graph-data');
+  var membersEl = document.getElementById('semantic-node-members');
+  if (!dataEl) return;
+  var data = JSON.parse(dataEl.textContent || '{"nodes":[],"edges":[]}');
+  var members = membersEl ? JSON.parse(membersEl.textContent || '{}') : {};
+  var nodes = data.nodes || [], edges = data.edges || [];
+  if (!nodes.length) return;
+
+  var svg = document.getElementById('semantic-canvas');
+  var panel = document.getElementById('semantic-detail-panel');
+  var panelBody = document.getElementById('semantic-detail-body');
+  var panelClose = document.getElementById('semantic-detail-close');
+  var legend = document.getElementById('semantic-legend');
+  if (!svg) return;
+
+  var KIND_COL = {cron:0, entry:1, agent:2, service:2, model:3, tool:3, store:4, external:4};
+  var KIND_COLOR = {
+    entry:'#3b82f6', cron:'#eab308', agent:'#a855f7', model:'#6366f1',
+    tool:'#06b6d4', service:'#f97316', store:'#22c55e', external:'#ec4899'
+  };
+  var KIND_LABEL = {
+    entry:'Entry', cron:'Cron', agent:'Agent', model:'Model',
+    tool:'Tool', service:'Service', store:'Store', external:'External'
+  };
+  var GROUP_PALETTE = ['#60a5fa','#f472b6','#34d399','#fbbf24','#a78bfa','#fb923c','#4ade80','#f87171'];
+  var groupColor = {};
+  var gi = 0;
+  nodes.forEach(function(n){
+    if (n.group && !(n.group in groupColor)){
+      groupColor[n.group] = GROUP_PALETTE[gi % GROUP_PALETTE.length];
+      gi++;
+    }
+  });
+
+  var COL_W = 240, NODE_W = 200, NODE_H = 52, NODE_GAP = 14, COL_GAP = 90, PAD = 30;
+
+  // Bucket nodes into columns, sort so same-group nodes cluster together.
+  var cols = [[],[],[],[],[]];
+  nodes.forEach(function(n){
+    var c = KIND_COL[n.kind];
+    if (c === undefined) c = 2;
+    cols[c].push(n);
+  });
+  cols.forEach(function(col){
+    col.sort(function(a,b){
+      var ga = a.group || '', gb = b.group || '';
+      if (ga !== gb) return ga.localeCompare(gb);
+      return (a.label||'').localeCompare(b.label||'');
+    });
+  });
+
+  var pos = {};
+  var maxColHeight = 0;
+  cols.forEach(function(col, ci){
+    var y = PAD;
+    var lastGroup = null;
+    col.forEach(function(n){
+      if (n.group && n.group !== lastGroup) y += 18; // room for a group tag
+      lastGroup = n.group || null;
+      pos[n.id] = {x: PAD + ci * (COL_W + COL_GAP), y: y, col: ci};
+      y += NODE_H + NODE_GAP;
+    });
+    if (y > maxColHeight) maxColHeight = y;
+  });
+
+  var widthUsed = cols.reduce(function(m,c,i){ return c.length ? i : m; }, 0);
+  var totalW = PAD * 2 + (widthUsed + 1) * COL_W + widthUsed * COL_GAP;
+  var totalH = Math.max(maxColHeight + PAD, 300);
+
+  svg.setAttribute('viewBox', '0 0 ' + totalW + ' ' + totalH);
+  svg.setAttribute('width', totalW);
+  svg.setAttribute('height', totalH);
+
+  function el(tag, attrs){
+    var e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  // Arrowhead marker
+  var defs = el('defs', {});
+  var marker = el('marker', {id:'sem-arrow', viewBox:'0 0 10 10', refX:'9', refY:'5',
+    markerWidth:'7', markerHeight:'7', orient:'auto-start-reverse'});
+  marker.appendChild(el('path', {d:'M0,0 L10,5 L0,10 z', fill:'var(--muted)'}));
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+
+  var edgeLayer = el('g', {'class':'sem-edges'});
+  var nodeLayer = el('g', {'class':'sem-nodes'});
+  svg.appendChild(edgeLayer);
+  svg.appendChild(nodeLayer);
+
+  var nodeById = {};
+  nodes.forEach(function(n){ nodeById[n.id] = n; });
+
+  function anchor(n, side){
+    var p = pos[n.id];
+    var y = p.y + NODE_H/2;
+    return side === 'r' ? {x: p.x + NODE_W, y: y} : {x: p.x, y: y};
+  }
+
+  edges.forEach(function(e){
+    var s = nodeById[e.from], t = nodeById[e.to];
+    if (!s || !t) return;
+    var ps = pos[s.id], pt = pos[t.id];
+    var a, b;
+    if (ps.col <= pt.col){ a = anchor(s,'r'); b = anchor(t,'l'); }
+    else { a = anchor(s,'l'); b = anchor(t,'r'); }
+    var dx = Math.max(40, Math.abs(b.x - a.x) * 0.4);
+    var sign = ps.col <= pt.col ? 1 : -1;
+    var d = 'M' + a.x + ',' + a.y + ' C ' + (a.x + sign*dx) + ',' + a.y + ' '
+      + (b.x - sign*dx) + ',' + b.y + ' ' + b.x + ',' + b.y;
+    var path = el('path', {d:d, fill:'none', stroke:'var(--border2)', 'stroke-width':'1.5',
+      'marker-end':'url(#sem-arrow)', 'data-from':s.id, 'data-to':t.id, 'class':'sem-edge'});
+    edgeLayer.appendChild(path);
+    if (e.label){
+      var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      var txt = el('text', {x:mx, y:my - 6, 'text-anchor':'middle', class:'sem-edge-label'});
+      txt.textContent = e.label;
+      edgeLayer.appendChild(txt);
+    }
+  });
+
+  var lastGroupSeen = {};
+  nodes.forEach(function(n){
+    var p = pos[n.id];
+    var g = el('g', {'class':'sem-node', 'data-id':n.id, transform:'translate(' + p.x + ',' + p.y + ')'});
+    if (n.group && lastGroupSeen[p.col + ':' + n.group] === undefined){
+      lastGroupSeen[p.col + ':' + n.group] = true;
+      var tag = el('text', {x:0, y:-6, class:'sem-group-tag', fill: groupColor[n.group]});
+      tag.textContent = n.group;
+      g.appendChild(tag);
+    }
+    var accent = n.group ? groupColor[n.group] : (KIND_COLOR[n.kind] || 'var(--muted)');
+    var rect = el('rect', {width:NODE_W, height:NODE_H, rx:8, class:'sem-node-rect',
+      style:'--kind-color:' + (KIND_COLOR[n.kind]||'#64748b') + ';--accent:' + accent});
+    g.appendChild(rect);
+    var bar = el('rect', {width:4, height:NODE_H, rx:2, fill:accent});
+    g.appendChild(bar);
+    var label = el('text', {x:14, y:22, class:'sem-node-label'});
+    label.textContent = n.label || n.id;
+    g.appendChild(label);
+    if (n.sub){
+      var sub = el('text', {x:14, y:38, class:'sem-node-sub'});
+      sub.textContent = n.sub;
+      g.appendChild(sub);
+    }
+    var kindTag = el('text', {x:NODE_W-10, y:14, 'text-anchor':'end', class:'sem-node-kind',
+      fill: KIND_COLOR[n.kind] || 'var(--muted)'});
+    kindTag.textContent = (KIND_LABEL[n.kind] || n.kind || '').toUpperCase();
+    g.appendChild(kindTag);
+    g.addEventListener('click', function(){ selectNode(n.id); });
+    g.addEventListener('mouseenter', function(){ hoverNode(n.id); });
+    g.addEventListener('mouseleave', function(){ hoverNode(null); });
+    nodeLayer.appendChild(g);
+  });
+
+  function hoverNode(id){
+    var connected = {};
+    if (id){
+      connected[id] = true;
+      edges.forEach(function(e){
+        if (e.from === id) connected[e.to] = true;
+        if (e.to === id) connected[e.from] = true;
+      });
+    }
+    nodeLayer.querySelectorAll('.sem-node').forEach(function(g){
+      var nid = g.getAttribute('data-id');
+      g.classList.toggle('sem-dim', !!id && !connected[nid]);
+    });
+    edgeLayer.querySelectorAll('.sem-edge').forEach(function(p){
+      var isRelated = !id || connected[p.getAttribute('data-from')] && connected[p.getAttribute('data-to')]
+        && (p.getAttribute('data-from') === id || p.getAttribute('data-to') === id);
+      p.classList.toggle('sem-edge-active', !!id && isRelated);
+      p.classList.toggle('sem-dim', !!id && !isRelated);
+    });
+  }
+
+  function selectNode(id){
+    var n = nodeById[id];
+    if (!n || !panel) return;
+    var memberIds = members[id] || [];
+    var html = '<div class="sem-detail-kind" style="color:' + (KIND_COLOR[n.kind]||'#64748b') + '">'
+      + (KIND_LABEL[n.kind] || n.kind).toUpperCase() + '</div>'
+      + '<div class="sem-detail-label">' + escapeHtml(n.label || n.id) + '</div>'
+      + (n.sub ? '<div class="sem-detail-sub">' + escapeHtml(n.sub) + '</div>' : '')
+      + (n.detail ? '<p class="sem-detail-desc">' + escapeHtml(n.detail) + '</p>' : '')
+      + (n.sourceRef ? '<div class="sem-detail-ref">' + escapeHtml(n.sourceRef) + '</div>' : '')
+      + (n.domain ? '<div class="sem-detail-domain">' + escapeHtml(n.domain) + '</div>' : '');
+    panelBody.innerHTML = html;
+    var btn = document.getElementById('semantic-detail-import-btn');
+    if (btn) btn.remove();
+    if (memberIds.length && window.__wfgenIsolateGraphNodes){
+      var b = document.createElement('button');
+      b.id = 'semantic-detail-import-btn';
+      b.className = 'sem-detail-btn';
+      b.textContent = 'Show import details (' + memberIds.length + ' file' + (memberIds.length===1?'':'s') + ')';
+      b.addEventListener('click', function(){
+        window.__wfgenIsolateGraphNodes(memberIds, n.label || n.id);
+        var target = document.getElementById('section-graph');
+        if (target) target.scrollIntoView({behavior:'smooth', block:'start'});
+      });
+      panelBody.appendChild(b);
+    }
+    panel.hidden = false;
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  if (panelClose) panelClose.addEventListener('click', function(){ panel.hidden = true; });
+
+  if (legend){
+    Object.keys(KIND_LABEL).forEach(function(k){
+      if (!nodes.some(function(n){ return n.kind === k; })) return;
+      var item = document.createElement('span');
+      item.className = 'sem-legend-item';
+      item.innerHTML = '<i style="background:' + KIND_COLOR[k] + '"></i>' + KIND_LABEL[k];
+      legend.appendChild(item);
+    });
   }
 })();
 """
@@ -2349,31 +2651,63 @@ def build_semantic_graph(root: Path, analysis: dict) -> dict:
     else:
         comp_root_id = None
 
-    # 2. ENTRY nodes (from routes)
-    api_server = analysis.get('api_server', {})
-    routes = api_server.get('routes', [])
+    # 2. ENTRY nodes — one per file that declares routes, grouped by the
+    # file's own name (routers/controllers are near-universally named after
+    # the resource they own: users.py, items.py, login.py). This is more
+    # reliable than grouping by URL path prefix: detect_api_server()'s route
+    # list is a flat, deduplicated, capped-at-20 set of "METHOD path"
+    # strings with no per-file provenance, and many frameworks (e.g. this
+    # project's own FastAPI routers) mount each router's own paths without
+    # repeating a shared prefix in the decorator string itself, so grouping
+    # by path segment silently produces empty/meaningless groups.
+    _GENERIC_STEMS = {'routes', 'router', 'routers', 'views', 'controllers',
+                       'controller', 'api', 'endpoints', 'handlers'}
     entry_nodes = {}
-    route_groups = {}
-
-    for route in routes:
-        # Route is a string like "GET /api/v1/items"
-        parts = route.split(' ', 1)
-        path = parts[1] if len(parts) > 1 else '/'
-        # Group by prefix (e.g., /api/v1/users/* → "users-api")
-        path_parts = path.split('/')
-        prefix = path_parts[2] if len(path_parts) > 2 else 'root'  # Get second component after v1
-        if prefix not in route_groups:
-            group_id = f"{prefix}-api"
-            group_label = f"{prefix.title()} API"
-            entry_nodes[group_id] = {
-                'id': group_id,
-                'label': group_label,
+    route_patterns = [_RE['fastapi_route'], _RE['flask_route'], _RE['django_path'], _RE['express_route']]
+    for f in _collect_graph_files(root):
+        if f.suffix not in ('.py', '.js', '.ts'):
+            continue
+        try:
+            text = f.read_text(encoding='utf-8', errors='ignore')
+        except OSError:
+            continue
+        if not any(pat.search(text) for pat in route_patterns):
+            continue
+        stem = f.stem.lower()
+        if stem in _GENERIC_STEMS or stem == '__init__':
+            group_name = f.parent.name.replace('_', ' ').title()
+        else:
+            group_name = stem.replace('_', ' ').title()
+        group_id = re.sub(r'[^a-z0-9]+', '-', group_name.lower()).strip('-') or 'entry'
+        node_id = f"entry-{group_id}"
+        rel_path = f.relative_to(root).as_posix()
+        if node_id not in entry_nodes:
+            entry_nodes[node_id] = {
+                'id': node_id,
+                'label': f"{group_name} API"[:28],
                 'kind': 'entry',
-                'sub': f"/{prefix}/*",
-                'group': prefix.title()
+                'sub': rel_path,
+                'sourceRef': rel_path,
+                'group': group_name,
             }
-            route_groups[prefix] = group_id
-            node_members[group_id] = set()
+            node_members[node_id] = set()
+        node_members[node_id].add(rel_path)
+
+    # Cap entry nodes: merge the smallest (fewest member files) beyond 20
+    # rather than truncating arbitrarily, so the biggest routers survive.
+    if len(entry_nodes) > 20:
+        ordered = sorted(entry_nodes.items(), key=lambda kv: len(node_members[kv[0]]), reverse=True)
+        kept, overflow = ordered[:19], ordered[19:]
+        entry_nodes = dict(kept)
+        merged_members = set()
+        for node_id, _ in overflow:
+            merged_members |= node_members.pop(node_id)
+        if merged_members:
+            entry_nodes['entry-other'] = {
+                'id': 'entry-other', 'label': 'Other routes', 'kind': 'entry',
+                'sub': f'{len(overflow)} smaller routers',
+            }
+            node_members['entry-other'] = merged_members
 
     # Add entry nodes to graph
     for ent_id, ent_node in entry_nodes.items():
@@ -2386,95 +2720,118 @@ def build_semantic_graph(root: Path, analysis: dict) -> dict:
                 'kind': 'triggers'
             })
 
-    # 3. SERVICE nodes (inferred from CRUD/utils files, grouped by directory)
+    # 3. SERVICE nodes — files matching common business-logic naming
+    # conventions (crud/services/repository layers, plus any file with a
+    # send_email-style function, which is common enough across frameworks to
+    # call out explicitly). Generalizes beyond a single project's layout;
+    # still name-pattern-based, not import-graph-based, consistent with this
+    # function's other detectors.
+    _SERVICE_STEM_LABELS = {
+        'crud': ('CRUD service', 'Create/Read/Update/Delete operations', 'Data'),
+        'services': ('Service layer', 'Business logic', 'Core'),
+        'service': ('Service layer', 'Business logic', 'Core'),
+        'repository': ('Repository', 'Data access layer', 'Data'),
+        'dao': ('Data access', 'Data access layer', 'Data'),
+    }
     service_nodes = {}
-    crud_file = None
-    utils_file = None
+    for f in _collect_graph_files(root):
+        if f.suffix != '.py':
+            continue
+        rel = f.relative_to(root).as_posix()
+        stem = f.stem.lower()
+        try:
+            text = f.read_text(encoding='utf-8', errors='ignore')
+        except OSError:
+            text = ''
+        label = sub = group = None
+        if stem in _SERVICE_STEM_LABELS:
+            label, sub, group = _SERVICE_STEM_LABELS[stem]
+        elif re.search(r'def send_email\b', text, re.I):
+            label, sub, group = 'Email service', 'Email templates + SMTP', 'Communication'
+        if label:
+            svc_id = f"service-{re.sub(r'[^a-z0-9]+', '-', stem)}"
+            service_nodes[svc_id] = {
+                'id': svc_id, 'label': label, 'kind': 'service', 'sub': sub,
+                'sourceRef': rel, 'group': group,
+            }
+            node_members[svc_id] = {rel}
 
-    # Find key service files
-    for py_file in root.rglob('*.py'):
-        rel = py_file.relative_to(root).as_posix()
-        if 'crud.py' in rel:
-            crud_file = rel
-        elif 'utils.py' in rel and 'app/utils' in rel:
-            utils_file = rel
-
-    # Create service nodes from detected files
-    if crud_file:
-        service_nodes['crud'] = {
-            'id': 'crud-service',
-            'label': 'CRUD service',
-            'kind': 'service',
-            'sub': 'Create/Read/Update/Delete operations',
-            'sourceRef': crud_file,
-            'detail': 'Data access layer for core entities',
-            'group': 'Data'
-        }
-        node_members['crud-service'] = {crud_file}
-
-    if utils_file:
-        service_nodes['utils'] = {
-            'id': 'email-service',
-            'label': 'Email service',
-            'kind': 'service',
-            'sub': 'Email templates + SMTP',
-            'sourceRef': utils_file,
-            'detail': 'Sends password resets and notifications',
-            'group': 'Communication'
-        }
-        node_members['email-service'] = {utils_file}
-
-    # Add service nodes
+    # Add service nodes, linking only entries whose files actually reference
+    # this service's module (by stem, e.g. `crud.create_user(` or
+    # `from app import crud`) — avoids an N-entries x M-services edge blowup.
     for svc_id, svc_node in service_nodes.items():
         nodes.append(svc_node)
-        # Link entries to services
-        for entry_id in entry_nodes:
-            edges.append({
-                'from': entry_id,
-                'to': svc_node['id'],
-                'kind': 'calls'
-            })
+        svc_stem = Path(svc_node['sourceRef']).stem
+        for ent_id, ent_node in entry_nodes.items():
+            ent_files = node_members.get(ent_id, ())
+            referenced = False
+            for rel in ent_files:
+                try:
+                    ent_text = (root / rel).read_text(encoding='utf-8', errors='ignore')
+                except OSError:
+                    continue
+                if re.search(r'\b' + re.escape(svc_stem) + r'\b', ent_text):
+                    referenced = True
+                    break
+            if referenced:
+                edges.append({'from': ent_id, 'to': svc_id, 'kind': 'calls'})
 
-    # 4. STORE nodes (from detected storage)
+    # 4. STORE nodes (from detected storage). detect_storage() returns
+    # {'name','type','desc','color'} — no domain, so branding comes from a
+    # small static lookup (mirrors the bundled-icon set planned for the
+    # renderer; brands outside this list simply render without one).
     store_nodes = {}
     for store_type in analysis.get('storage', []):
         store_name = store_type.get('name', 'Store')
-        store_id = f"store-{store_name.lower()}"
+        store_id = f"store-{re.sub(r'[^a-z0-9]+', '-', store_name.lower())}"
         if store_id not in store_nodes:
             store_nodes[store_id] = {
                 'id': store_id,
                 'label': store_name,
                 'kind': 'store',
-                'domain': store_type.get('domain')
+                'domain': _BRAND_DOMAINS.get(store_name),
             }
             nodes.append(store_nodes[store_id])
 
-    # Link services to stores (reads/writes heuristic)
+    # Link services to stores only when the service's file actually
+    # references the store by name (e.g. "postgres"/"redis" appearing in
+    # crud.py) — cheap, honest correlation rather than an N x M fan-out.
     for svc_id, svc_node in service_nodes.items():
-        for store_id in store_nodes:
-            if svc_id == 'crud':  # CRUD writes to DB
-                edges.append({
-                    'from': svc_node['id'],
-                    'to': store_id,
-                    'kind': 'writes'
-                })
-            elif svc_id == 'utils':  # Email service doesn't directly write to DB
-                pass
+        try:
+            svc_text = (root / svc_node['sourceRef']).read_text(encoding='utf-8', errors='ignore').lower()
+        except (OSError, KeyError):
+            svc_text = ''
+        for store_id, store_node in store_nodes.items():
+            store_hint = store_node['label'].split(' ')[0].split('/')[0].lower()
+            if store_hint and store_hint in svc_text:
+                edges.append({'from': svc_node['id'], 'to': store_id, 'kind': 'writes'})
 
-    # 5. EXTERNAL nodes (from detected integrations)
+    # 5. EXTERNAL nodes (from detected integrations). detect_external_sources()
+    # always appends "Users / API Clients" (an inbound source, not an
+    # outbound integration) and sometimes "Cron / Scheduler" (redundant with
+    # the dedicated detect_crons() pass above) — both excluded here since
+    # neither is a real third-party integration the app calls out to.
+    _NON_INTEGRATION_SOURCES = {'Users / API Clients', 'Cron / Scheduler'}
     external_nodes = {}
     for ext in analysis.get('external_sources', []):
-        ext_id = f"external-{ext.get('name', 'service').lower()}"
+        ext_name = ext.get('name', 'service')
+        if ext_name in _NON_INTEGRATION_SOURCES:
+            continue
+        ext_id = f"external-{re.sub(r'[^a-z0-9]+', '-', ext_name.lower())}"
         if ext_id not in external_nodes:
             external_nodes[ext_id] = {
                 'id': ext_id,
-                'label': ext.get('name', 'External'),
+                'label': ext_name,
                 'kind': 'external',
-                'domain': ext.get('domain')
+                'domain': _BRAND_DOMAINS.get(ext_name),
             }
             nodes.append(external_nodes[ext_id])
 
-    # 6. CRON nodes (if detected)
+    # 6. CRON nodes (if detected). No reliable signal ties a specific cron
+    # to a specific service without deeper analysis than this pass does, so
+    # — consistent with "never fabricate a connection" — cron nodes only
+    # link to the composition root (if one exists) rather than to every
+    # service found anywhere in the repo.
     cron_nodes = {}
     for cron in analysis.get('crons', []):
         cron_id = f"cron-{cron.get('type', 'job')}"
@@ -2486,15 +2843,8 @@ def build_semantic_graph(root: Path, analysis: dict) -> dict:
                 'sub': cron.get('detail', 'Periodic task')
             }
             nodes.append(cron_nodes[cron_id])
-
-    # Link crons to services
-    for cron_id, cron_node in cron_nodes.items():
-        for svc_id, svc_node in service_nodes.items():
-            edges.append({
-                'from': cron_node['id'],
-                'to': svc_node['id'],
-                'kind': 'triggers'
-            })
+            if comp_root_id:
+                edges.append({'from': cron_id, 'to': comp_root_id, 'kind': 'triggers'})
 
     # 7. MODEL nodes (from detected LLMs)
     model_nodes = {}
@@ -2726,6 +3076,35 @@ faster. Treat this number as a starting estimate, not a capacity guarantee.</div
     table_html = render_concurrency_table(analysis, cap)
     bn_html = render_bottlenecks(analysis, cap)
 
+    sg = analysis.get('semantic_graph') or {}
+    sg_graph = sg.get('graph') or {'nodes': [], 'edges': []}
+    semantic_section = ''
+    if sg_graph.get('nodes'):
+        sg_nodes_json = json.dumps(sg_graph['nodes'])
+        sg_edges_json = json.dumps(sg_graph.get('edges', []))
+        sg_members = sg.get('node_members') or {}
+        sg_members_json = json.dumps({k: sorted(v) if isinstance(v, set) else list(v) for k, v in sg_members.items()})
+        sg_stats = sg.get('stats') or {}
+        stat_bits = ', '.join(f"{v} {k}" for k, v in sg_stats.items() if v)
+        semantic_section = f"""
+<div class="section" id="section-semantic">
+<div class="section-title">Architecture Map — {len(sg_graph['nodes'])} components · {len(sg_graph.get('edges', []))} flows</div>
+<p style="font-size:11px;color:var(--muted);margin:-4px 0 16px">A curated view of how the system works: entry points, services, datastores, and external integrations — grouped by feature, not by file layout.{' Detected: ' + stat_bits + '.' if stat_bits else ''} Click any node for details; use <b>Show import details</b> to jump to the exact files behind it in the Codebase Graph below.</p>
+<div class="sem-legend" id="semantic-legend"></div>
+<div class="semantic-wrap">
+<div class="semantic-scroll">
+<svg id="semantic-canvas"></svg>
+</div>
+<div id="semantic-detail-panel" class="semantic-detail-panel" hidden>
+<button id="semantic-detail-close" class="sem-detail-close" type="button" aria-label="Close">&times;</button>
+<div id="semantic-detail-body"></div>
+</div>
+</div>
+<script type="application/json" id="semantic-graph-data">{{"nodes": {sg_nodes_json}, "edges": {sg_edges_json}}}</script>
+<script type="application/json" id="semantic-node-members">{sg_members_json}</script>
+</div>
+"""
+
     graph = analysis.get('graph') or {'nodes': [], 'links': [], 'meta': {'files': 0, 'links': 0, 'aggregated': False, 'shown_nodes': 0, 'has_access_log': False}}
     graph_json = json.dumps(graph)
     gm = graph['meta']
@@ -2791,6 +3170,7 @@ faster. Treat this number as a starting estimate, not a capacity guarantee.</div
 <div class="stat-row">{stats}</div>
 <p style="font-size:11px;color:var(--muted);margin:-28px 0 20px">Capacity figures are static-analysis estimates (heuristic: ~100 concurrent tasks per async worker), not load-test results.</p>
 <div id="tour-derivation">{derivation_html}</div>
+{semantic_section}
 {graph_section}
 <div class="section" id="section-architecture">
 <div class="section-title">Full System Architecture — {component_count} Components</div>
@@ -2819,6 +3199,7 @@ faster. Treat this number as a starting estimate, not a capacity guarantee.</div
 </div>
 <script>{EDGE_JS}</script>
 <script>{GRAPH_JS}</script>
+<script>{SEMANTIC_GRAPH_JS}</script>
 <script>{TOUR_JS}</script>
 </body>
 </html>"""
