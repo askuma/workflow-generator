@@ -430,3 +430,73 @@ def test_build_semantic_graph_top_integrations_populated(az_module, tmp_path):
     }
     sg = az.build_semantic_graph(root, analysis)
     assert sg['topIntegrations'] == [{'id': 'stripe', 'label': 'Stripe', 'domain': 'stripe.com'}]
+
+
+def _orm_session_project(tmp_path):
+    # crud.py never spells out "postgresql" anywhere (the connection lives
+    # in a separate core/db.py this fixture doesn't even need) — it only
+    # talks to the store through a generic SQLModel/SQLAlchemy-style
+    # session, which is how most layered ORM apps actually look.
+    return write_project(tmp_path, {
+        "app/crud.py": (
+            "from sqlmodel import Session\n"
+            "def create_user(session: Session, user):\n"
+            "    session.add(user)\n"
+            "    session.commit()\n"
+            "    session.refresh(user)\n"
+            "    return user\n"
+        ),
+    })
+
+
+def test_build_semantic_graph_links_orm_session_to_sole_store(az_module, tmp_path):
+    # Regression test: Postgres was showing up with zero edges in the real
+    # FastAPI template demo because the literal-name heuristic requires
+    # "postgres" to appear in crud.py's own text, which it never does for
+    # SQLModel/SQLAlchemy-style layered apps. When exactly one non-cache
+    # store is detected repo-wide, a generic session.add()/session.exec()
+    # call is enough to honestly infer the connection.
+    az = az_module
+    root = _orm_session_project(tmp_path)
+    analysis = {
+        'project_name': 'Demo',
+        'api_server': {'routes': []},
+        'storage': [{'name': 'PostgreSQL', 'type': 'relational'}],
+        'external_sources': [],
+        'crons': [],
+        'tools': [],
+        'agents': [],
+        'composition_root': None,
+        'llm': {'providers': []},
+    }
+    sg = az.build_semantic_graph(root, analysis)
+    edges = sg['graph']['edges']
+    to_store = [e for e in edges if e['to'] == 'store-postgresql']
+    assert len(to_store) == 1
+    assert to_store[0]['from'] == 'service-crud'
+
+
+def test_build_semantic_graph_orm_session_skips_ambiguous_multi_store(az_module, tmp_path):
+    # With two non-cache stores present, a bare session.add() doesn't say
+    # which one it means — never fabricate a connection when it's genuinely
+    # ambiguous which store is meant.
+    az = az_module
+    root = _orm_session_project(tmp_path)
+    analysis = {
+        'project_name': 'Demo',
+        'api_server': {'routes': []},
+        'storage': [
+            {'name': 'PostgreSQL', 'type': 'relational'},
+            {'name': 'MongoDB', 'type': 'nosql'},
+        ],
+        'external_sources': [],
+        'crons': [],
+        'tools': [],
+        'agents': [],
+        'composition_root': None,
+        'llm': {'providers': []},
+    }
+    sg = az.build_semantic_graph(root, analysis)
+    edges = sg['graph']['edges']
+    service_to_store = [e for e in edges if e['from'] == 'service-crud' and e['to'].startswith('store-')]
+    assert service_to_store == []

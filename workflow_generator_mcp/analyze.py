@@ -3021,6 +3021,7 @@ def build_semantic_graph(root: Path, analysis: dict) -> dict:
     # small static lookup (mirrors the bundled-icon set planned for the
     # renderer; brands outside this list simply render without one).
     store_nodes = {}
+    store_types = {}
     for store_type in analysis.get('storage', []):
         store_name = store_type.get('name', 'Store')
         store_id = f"store-{re.sub(r'[^a-z0-9]+', '-', store_name.lower())}"
@@ -3031,7 +3032,25 @@ def build_semantic_graph(root: Path, analysis: dict) -> dict:
                 'kind': 'store',
                 'domain': _BRAND_DOMAINS.get(store_name),
             }
+            store_types[store_id] = store_type.get('type')
             nodes.append(store_nodes[store_id])
+
+    # Generic ORM/session usage — a bare `session.add()`/`.objects.create()`
+    # talks to the app's primary datastore even when the file never spells
+    # the store's name out (common for layered apps where the connection
+    # lives in a separate db/core module, e.g. SQLModel/SQLAlchemy/Django
+    # ORM/Mongoose). Used only as a fallback when the literal-name match
+    # above finds nothing, and only when exactly one non-cache store is
+    # detected repo-wide — with more than one candidate, which store a bare
+    # `session.add()` means is genuinely ambiguous, so no edge is fabricated.
+    _GENERIC_DB_SESSION_RE = re.compile(
+        r'\bsession\.(exec|query|add|commit|delete|refresh)\(|'
+        r'\bdb\.(query|add|commit)\(|'
+        r'\.objects\.(create|get|filter|all)\(|'
+        r'\bawait\s+\w+\.save\(\)',
+        re.I,
+    )
+    non_cache_store_ids = [sid for sid in store_nodes if store_types.get(sid) != 'cache']
 
     # Link services to stores only when the service's file actually
     # references the store by name (e.g. "postgres"/"redis" appearing in
@@ -3041,10 +3060,14 @@ def build_semantic_graph(root: Path, analysis: dict) -> dict:
             svc_text = (root / svc_node['sourceRef']).read_text(encoding='utf-8', errors='ignore').lower()
         except (OSError, KeyError):
             svc_text = ''
+        matched = False
         for store_id, store_node in store_nodes.items():
             store_hint = store_node['label'].split(' ')[0].split('/')[0].lower()
             if store_hint and store_hint in svc_text:
                 edges.append({'from': svc_node['id'], 'to': store_id, 'kind': 'writes'})
+                matched = True
+        if not matched and len(non_cache_store_ids) == 1 and _GENERIC_DB_SESSION_RE.search(svc_text):
+            edges.append({'from': svc_node['id'], 'to': non_cache_store_ids[0], 'kind': 'writes'})
 
     # 5. EXTERNAL nodes (from detected integrations). detect_external_sources()
     # always appends "Users / API Clients" (an inbound source, not an
