@@ -1213,20 +1213,24 @@ display:none;max-width:320px;line-height:1.5}
 .graph-tooltip .tt-path{font-family:var(--mono);font-weight:600;word-break:break-all}
 .graph-tooltip .tt-meta{color:var(--muted);font-size:10.5px;margin-top:3px}
 .semantic-wrap{position:relative;display:flex;gap:16px;align-items:flex-start}
-.semantic-scroll{flex:1;overflow:auto;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:8px}
+.semantic-scroll{flex:1;overflow:auto;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:16px}
 #semantic-canvas{display:block}
-.sem-node-rect{fill:var(--bg2);stroke:var(--border2);stroke-width:1.25;transition:opacity .15s}
+.sem-group-box{fill:var(--gcolor,var(--border2));fill-opacity:.045;stroke:var(--gcolor,var(--border2));
+stroke-opacity:.5;stroke-width:1.25}
+.sem-node-rect{fill:var(--bg2);stroke:var(--border2);stroke-width:1.25;transition:stroke .15s,opacity .15s}
 .sem-node{cursor:pointer}
-.sem-node:hover .sem-node-rect{stroke:var(--accent-color,var(--muted))}
-.sem-node.sem-dim{opacity:.28}
+.sem-node:hover .sem-node-rect{stroke:var(--muted)}
+.sem-node.sem-dim{opacity:.25}
+.sem-icon{stroke-linecap:round;stroke-linejoin:round}
 .sem-node-label{font-family:var(--sans);font-size:12.5px;font-weight:600;fill:var(--text)}
-.sem-node-sub{font-family:var(--mono);font-size:10px;fill:var(--muted)}
-.sem-node-kind{font-family:var(--sans);font-size:8.5px;font-weight:700;letter-spacing:.06em}
-.sem-group-tag{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
-.sem-edge{opacity:.55;transition:opacity .15s,stroke .15s}
-.sem-edge.sem-edge-active{opacity:1;stroke:var(--text)}
-.sem-edge.sem-dim{opacity:.12}
-.sem-edge-label{font-family:var(--sans);font-size:9.5px;fill:var(--muted);text-anchor:middle}
+.sem-node-sub{font-family:var(--mono);font-size:9.5px;fill:var(--muted)}
+.sem-group-tag{font-family:var(--sans);font-size:9.5px;font-weight:700;letter-spacing:.06em}
+.sem-edge{opacity:.7;transition:opacity .15s,stroke .15s;fill:none}
+.sem-edge.sem-edge-labeled{opacity:.85}
+.sem-edge.sem-edge-active{opacity:1;stroke:var(--text)!important}
+.sem-edge.sem-dim{opacity:.1}
+.sem-flow-dot{opacity:.9}
+.sem-edge-label{font-family:var(--sans);font-size:9.5px;fill:#f472b6;text-anchor:middle;font-weight:600}
 .semantic-detail-panel{width:280px;flex-shrink:0;background:var(--bg3);border:1px solid var(--border);
 border-radius:12px;padding:16px;position:sticky;top:16px}
 .semantic-detail-panel[hidden]{display:none}
@@ -1243,9 +1247,10 @@ color:var(--text);border-radius:8px;padding:9px 10px;font-size:12px;font-weight:
 font-family:var(--sans)}
 .sem-detail-btn:hover{border-color:var(--muted)}
 .semantic-detail-placeholder{color:var(--muted);font-size:12.5px}
-.sem-legend{display:flex;flex-wrap:wrap;gap:10px 16px;margin-bottom:14px;font-size:11px;color:var(--muted)}
-.sem-legend-item{display:inline-flex;align-items:center;gap:5px}
-.sem-legend-item i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.sem-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 4px;margin-bottom:14px}
+.sem-legend-item{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);
+background:var(--bg3);border:1px solid var(--border);border-radius:999px;padding:5px 12px}
+.sem-legend-item i{width:7px;height:7px;border-radius:50%;display:inline-block}
 .derivation{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px 18px;margin:0 0 12px}
 .derivation summary{cursor:pointer;font-size:12px;font-weight:600;color:var(--text);list-style:revert}
 .derivation .muted-inline{font-weight:400;color:var(--muted);font-size:11px}
@@ -2067,12 +2072,15 @@ TOUR_JS = """
 """
 
 
-# Semantic Architecture Map renderer. Deterministic column-by-kind layout
-# (not force-directed, unlike GRAPH_JS below): request-flow reads left to
-# right — cron/entry sources, then agent/service logic, then model/tool,
-# then store/external sinks. Nodes sharing a `group` are clustered together
-# within their column and share an accent color, approximating foglamp's
-# "grouped vertical stack" without needing a full cross-column box layout.
+# Semantic Architecture Map renderer. Layout is a Sugiyama-style topological
+# layering (longest path from source nodes, computed via Kahn's algorithm on
+# a graph where each `group` collapses to one meta-node for layering
+# purposes) rather than a fixed kind-based column grid — this reproduces the
+# left-to-right "sources -> logic -> sinks" reading order a real dependency
+# flow naturally has. Groups render as an actual bounding box containing
+# their stacked members (with a short internal connector when a real edge
+# exists between two members), matching foglamp.dev/scan's grouped-stack
+# presentation instead of only a shared accent color.
 SEMANTIC_GRAPH_JS = """
 (function(){
   var dataEl = document.getElementById('semantic-graph-data');
@@ -2090,16 +2098,16 @@ SEMANTIC_GRAPH_JS = """
   var legend = document.getElementById('semantic-legend');
   if (!svg) return;
 
-  var KIND_COL = {cron:0, entry:1, agent:2, service:2, model:3, tool:3, store:4, external:4};
   var KIND_COLOR = {
-    entry:'#3b82f6', cron:'#eab308', agent:'#a855f7', model:'#6366f1',
-    tool:'#06b6d4', service:'#f97316', store:'#22c55e', external:'#ec4899'
+    entry:'#eab308', cron:'#eab308', agent:'#ec4899', model:'#6366f1',
+    tool:'#06b6d4', service:'#ec4899', store:'#22c55e', external:'#3b82f6'
   };
   var KIND_LABEL = {
-    entry:'Entry', cron:'Cron', agent:'Agent', model:'Model',
+    entry:'Trigger', cron:'Trigger', agent:'Service', model:'Model',
     tool:'Tool', service:'Service', store:'Store', external:'External'
   };
-  var GROUP_PALETTE = ['#60a5fa','#f472b6','#34d399','#fbbf24','#a78bfa','#fb923c','#4ade80','#f87171'];
+  var LEGEND_KINDS = [['entry','Triggers'],['service','Services'],['store','Stores'],['external','External']];
+  var GROUP_PALETTE = ['#f472b6','#60a5fa','#34d399','#fbbf24','#a78bfa','#fb923c','#4ade80','#f87171'];
   var groupColor = {};
   var gi = 0;
   nodes.forEach(function(n){
@@ -2108,41 +2116,120 @@ SEMANTIC_GRAPH_JS = """
       gi++;
     }
   });
+  // Only draw a bounding box for groups with >=2 members — a "group" of one
+  // (e.g. a service with no matching entry file) is just a plain node with
+  // a colored accent, not a boxed cluster.
+  var groupSize = {};
+  nodes.forEach(function(n){ if (n.group) groupSize[n.group] = (groupSize[n.group]||0) + 1; });
+  function isBoxedGroup(g){ return g && groupSize[g] >= 2; }
 
-  var COL_W = 240, NODE_W = 200, NODE_H = 52, NODE_GAP = 14, COL_GAP = 90, PAD = 30;
+  var nodeById = {};
+  nodes.forEach(function(n){ nodeById[n.id] = n; });
 
-  // Bucket nodes into columns, sort so same-group nodes cluster together.
-  var cols = [[],[],[],[],[]];
-  nodes.forEach(function(n){
-    var c = KIND_COL[n.kind];
-    if (c === undefined) c = 2;
-    cols[c].push(n);
+  // ---- Layering: collapse each boxed group to one meta-node, run Kahn's
+  // algorithm for a longest-path topological layer per meta-node, then
+  // expand back so every real node inherits its meta-node's layer. ----
+  function metaOf(id){
+    var n = nodeById[id];
+    return (n && isBoxedGroup(n.group)) ? ('grp:' + n.group) : id;
+  }
+  var metaIds = {};
+  nodes.forEach(function(n){ metaIds[metaOf(n.id)] = true; });
+  var metaOut = {}, metaIn = {};
+  Object.keys(metaIds).forEach(function(m){ metaOut[m] = {}; metaIn[m] = 0; });
+  edges.forEach(function(e){
+    var a = metaOf(e.from), b = metaOf(e.to);
+    if (a === b) return; // internal group edge, not used for layering
+    if (!metaOut[a][b]){ metaOut[a][b] = true; metaIn[b] = (metaIn[b]||0) + 1; }
   });
-  cols.forEach(function(col){
-    col.sort(function(a,b){
-      var ga = a.group || '', gb = b.group || '';
-      if (ga !== gb) return ga.localeCompare(gb);
-      return (a.label||'').localeCompare(b.label||'');
+  var layer = {};
+  var queue = Object.keys(metaIds).filter(function(m){ return !metaIn[m]; });
+  queue.forEach(function(m){ layer[m] = 0; });
+  var qi = 0, guard = 0;
+  while (qi < queue.length && guard++ < 5000){
+    var m = queue[qi++];
+    Object.keys(metaOut[m]).forEach(function(b){
+      if (layer[b] === undefined || layer[b] < layer[m] + 1) layer[b] = layer[m] + 1;
+      metaIn[b]--;
+      if (metaIn[b] <= 0 && queue.indexOf(b) === -1) queue.push(b);
     });
-  });
+  }
+  // Any meta-node untouched by the Kahn pass (a true cycle) gets layer 0.
+  Object.keys(metaIds).forEach(function(m){ if (layer[m] === undefined) layer[m] = 0; });
 
-  var pos = {};
+  var maxLayer = 0;
+  Object.keys(layer).forEach(function(m){ if (layer[m] > maxLayer) maxLayer = layer[m]; });
+
+  // Fully isolated meta-nodes (no in AND no out edges — e.g. a detected
+  // store nothing was confidently linked to) default to layer 0 from the
+  // Kahn seeding, which visually reads as "a source feeding everything."
+  // Push them to the end instead — an orphan reads more honestly as "found,
+  // but nothing connects to it" than as a false source.
+  Object.keys(metaIds).forEach(function(m){
+    var hasOut = Object.keys(metaOut[m] || {}).length > 0;
+    var hasIn = Object.keys(metaOut).some(function(o){ return metaOut[o][m]; });
+    if (!hasOut && !hasIn && maxLayer > 0) layer[m] = maxLayer;
+  });
+  var layerCols = [];
+  for (var i = 0; i <= maxLayer; i++) layerCols.push([]);
+  var placedMeta = {};
+  nodes.forEach(function(n){
+    var m = metaOf(n.id);
+    if (!placedMeta[m]){ placedMeta[m] = true; layerCols[layer[m]].push(m); }
+  });
+  layerCols.forEach(function(col){ col.sort(); });
+
+  // ---- Geometry ----
+  var NODE_W = 190, NODE_H = 50, NODE_GAP = 12, COL_GAP = 100, PAD = 34;
+  var BOX_PAD = 14, BOX_LABEL_H = 20;
+
+  var pos = {};          // node id -> {x,y}
+  var colX = [];
+  var x = PAD;
+  layerCols.forEach(function(col, ci){
+    colX.push(x);
+    var maxW = NODE_W;
+    col.forEach(function(m){
+      if (m.indexOf('grp:') === 0) maxW = Math.max(maxW, NODE_W + BOX_PAD * 2);
+    });
+    x += maxW + COL_GAP;
+  });
+  var totalW = x - COL_GAP + PAD;
+
   var maxColHeight = 0;
-  cols.forEach(function(col, ci){
+  layerCols.forEach(function(col, ci){
     var y = PAD;
-    var lastGroup = null;
-    col.forEach(function(n){
-      if (n.group && n.group !== lastGroup) y += 18; // room for a group tag
-      lastGroup = n.group || null;
-      pos[n.id] = {x: PAD + ci * (COL_W + COL_GAP), y: y, col: ci};
-      y += NODE_H + NODE_GAP;
+    col.forEach(function(m){
+      if (m.indexOf('grp:') === 0){
+        var groupName = m.slice(4);
+        var memberNodes = nodes.filter(function(n){ return n.group === groupName; });
+        // Order members so a real internal edge points top -> bottom.
+        memberNodes.sort(function(a, b){
+          var aHead = edges.some(function(e){ return e.to === a.id && e.from === b.id; });
+          if (aHead) return 1;
+          var bHead = edges.some(function(e){ return e.to === b.id && e.from === a.id; });
+          if (bHead) return -1;
+          return (a.label||'').localeCompare(b.label||'');
+        });
+        var innerY = y + BOX_LABEL_H + BOX_PAD;
+        memberNodes.forEach(function(n){
+          pos[n.id] = {x: colX[ci] + BOX_PAD, y: innerY, layer: ci, group: groupName};
+          innerY += NODE_H + NODE_GAP;
+        });
+        pos['grp:' + groupName] = {
+          x: colX[ci], y: y, w: NODE_W + BOX_PAD * 2,
+          h: (innerY - NODE_GAP) - y + BOX_PAD, label: groupName
+        };
+        y = innerY - NODE_GAP + BOX_PAD + 22;
+      } else {
+        var n = nodeById[m];
+        pos[m] = {x: colX[ci], y: y, layer: ci};
+        y += NODE_H + NODE_GAP + (n && n.group ? 18 : 0);
+      }
     });
     if (y > maxColHeight) maxColHeight = y;
   });
-
-  var widthUsed = cols.reduce(function(m,c,i){ return c.length ? i : m; }, 0);
-  var totalW = PAD * 2 + (widthUsed + 1) * COL_W + widthUsed * COL_GAP;
-  var totalH = Math.max(maxColHeight + PAD, 300);
+  var totalH = Math.max(maxColHeight + PAD, 320);
 
   svg.setAttribute('viewBox', '0 0 ' + totalW + ' ' + totalH);
   svg.setAttribute('width', totalW);
@@ -2154,78 +2241,162 @@ SEMANTIC_GRAPH_JS = """
     return e;
   }
 
-  // Arrowhead marker
   var defs = el('defs', {});
-  var marker = el('marker', {id:'sem-arrow', viewBox:'0 0 10 10', refX:'9', refY:'5',
-    markerWidth:'7', markerHeight:'7', orient:'auto-start-reverse'});
-  marker.appendChild(el('path', {d:'M0,0 L10,5 L0,10 z', fill:'var(--muted)'}));
-  defs.appendChild(marker);
+  [['sem-arrow','var(--muted)'], ['sem-arrow-hl','currentColor']].forEach(function(pair){
+    var marker = el('marker', {id:pair[0], viewBox:'0 0 10 10', refX:'8.5', refY:'5',
+      markerWidth:'6.5', markerHeight:'6.5', orient:'auto-start-reverse'});
+    marker.appendChild(el('path', {d:'M0,0 L10,5 L0,10 z', fill:pair[1]}));
+    defs.appendChild(marker);
+  });
   svg.appendChild(defs);
 
+  // ---- Group bounding boxes (drawn first, behind everything) ----
+  var boxLayer = el('g', {'class':'sem-boxes'});
   var edgeLayer = el('g', {'class':'sem-edges'});
   var nodeLayer = el('g', {'class':'sem-nodes'});
+  svg.appendChild(boxLayer);
   svg.appendChild(edgeLayer);
   svg.appendChild(nodeLayer);
 
-  var nodeById = {};
-  nodes.forEach(function(n){ nodeById[n.id] = n; });
+  Object.keys(pos).forEach(function(id){
+    if (id.indexOf('grp:') !== 0) return;
+    var b = pos[id];
+    var color = groupColor[b.label] || 'var(--border2)';
+    boxLayer.appendChild(el('rect', {
+      x:b.x, y:b.y, width:b.w, height:b.h, rx:10, class:'sem-group-box', style:'--gcolor:' + color
+    }));
+    var tag = el('text', {x:b.x + BOX_PAD, y:b.y + 15, class:'sem-group-tag', fill:color});
+    tag.textContent = b.label.toUpperCase();
+    boxLayer.appendChild(tag);
+  });
 
-  function anchor(n, side){
-    var p = pos[n.id];
-    var y = p.y + NODE_H/2;
-    return side === 'r' ? {x: p.x + NODE_W, y: y} : {x: p.x, y: y};
-  }
-
-  edges.forEach(function(e){
+  // ---- Internal (within-group) connectors: short vertical arrow ----
+  var groupInternalEdges = {};
+  Object.keys(nodeById).length && edges.forEach(function(e){
     var s = nodeById[e.from], t = nodeById[e.to];
-    if (!s || !t) return;
-    var ps = pos[s.id], pt = pos[t.id];
-    var a, b;
-    if (ps.col <= pt.col){ a = anchor(s,'r'); b = anchor(t,'l'); }
-    else { a = anchor(s,'l'); b = anchor(t,'r'); }
-    var dx = Math.max(40, Math.abs(b.x - a.x) * 0.4);
-    var sign = ps.col <= pt.col ? 1 : -1;
-    var d = 'M' + a.x + ',' + a.y + ' C ' + (a.x + sign*dx) + ',' + a.y + ' '
-      + (b.x - sign*dx) + ',' + b.y + ' ' + b.x + ',' + b.y;
-    var path = el('path', {d:d, fill:'none', stroke:'var(--border2)', 'stroke-width':'1.5',
-      'marker-end':'url(#sem-arrow)', 'data-from':s.id, 'data-to':t.id, 'class':'sem-edge'});
-    edgeLayer.appendChild(path);
-    if (e.label){
-      var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-      var txt = el('text', {x:mx, y:my - 6, 'text-anchor':'middle', class:'sem-edge-label'});
-      txt.textContent = e.label;
-      edgeLayer.appendChild(txt);
+    if (s && t && s.group && s.group === t.group && isBoxedGroup(s.group)){
+      groupInternalEdges[e.from + '>' + e.to] = e;
     }
   });
 
-  var lastGroupSeen = {};
-  nodes.forEach(function(n){
-    var p = pos[n.id];
+  function anchor(id, side){
+    var p = pos[id];
+    var y = p.y + NODE_H / 2;
+    return side === 'r' ? {x: p.x + NODE_W, y: y} : {x: p.x, y: y};
+  }
+
+  function drawEdge(e, internal){
+    var s = nodeById[e.from], t = nodeById[e.to];
+    if (!s || !t || !pos[s.id] || !pos[t.id]) return;
+    var ps = pos[s.id], pt = pos[t.id];
+    var a, b, d, pathId = 'sem-edge-' + edgeIdx++;
+    if (internal){
+      a = {x: ps.x + NODE_W/2, y: ps.y + NODE_H};
+      b = {x: pt.x + NODE_W/2, y: pt.y};
+      d = 'M' + a.x + ',' + a.y + ' L' + b.x + ',' + b.y;
+    } else {
+      var sameCol = ps.layer === pt.layer;
+      a = sameCol ? {x: ps.x + NODE_W/2, y: ps.y + NODE_H} : anchor(s.id, ps.layer <= pt.layer ? 'r' : 'l');
+      b = sameCol ? {x: pt.x + NODE_W/2, y: pt.y} : anchor(t.id, ps.layer <= pt.layer ? 'l' : 'r');
+      if (sameCol){
+        d = 'M' + a.x + ',' + a.y + ' L' + b.x + ',' + b.y;
+      } else {
+        var dx = Math.max(36, Math.abs(b.x - a.x) * 0.42);
+        var sign = ps.layer <= pt.layer ? 1 : -1;
+        d = 'M' + a.x + ',' + a.y + ' C ' + (a.x + sign*dx) + ',' + a.y + ' '
+          + (b.x - sign*dx) + ',' + b.y + ' ' + b.x + ',' + b.y;
+      }
+    }
+    var accent = e.label ? '#f472b6' : (internal ? 'var(--muted)' : 'var(--border2)');
+    var path = el('path', {
+      d:d, fill:'none', stroke:accent, 'stroke-width': e.label ? '1.75' : '1.4',
+      'marker-end':'url(#sem-arrow)', 'data-from':s.id, 'data-to':t.id,
+      'class':'sem-edge' + (e.label ? ' sem-edge-labeled' : ''), id: pathId
+    });
+    edgeLayer.appendChild(path);
+    if (!internal){
+      var dot = el('circle', {r:'2.2', fill:accent, class:'sem-flow-dot'});
+      var motion = el('animateMotion', {
+        dur: (3.5 + (edgeIdx % 4) * 0.6) + 's', repeatCount:'indefinite',
+        begin: ((edgeIdx % 5) * 0.4) + 's'
+      });
+      var mpath = el('mpath', {href:'#' + pathId});
+      mpath.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '#' + pathId);
+      motion.appendChild(mpath);
+      dot.appendChild(motion);
+      edgeLayer.appendChild(dot);
+    }
+    if (e.label){
+      var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      var txt = el('text', {x:mx, y: my - 7, 'text-anchor':'middle', class:'sem-edge-label'});
+      txt.textContent = e.label;
+      edgeLayer.appendChild(txt);
+    }
+  }
+
+  var edgeIdx = 0;
+  edges.forEach(function(e){
+    var key = e.from + '>' + e.to;
+    if (groupInternalEdges[key]) return; // drawn separately, below
+  });
+  Object.keys(groupInternalEdges).forEach(function(key){ drawEdge(groupInternalEdges[key], true); });
+  edges.forEach(function(e){
+    var key = e.from + '>' + e.to;
+    if (groupInternalEdges[key]) return;
+    drawEdge(e, false);
+  });
+
+  // ---- Icon glyphs (inline paths, no external font/icon set) ----
+  function icon(kind){
+    var g = el('g', {'class':'sem-icon'});
+    if (kind === 'entry' || kind === 'cron'){
+      g.appendChild(el('path', {d:'M6.5 0.5 L1 7.5h3.2L3 11.5l5.5-7.5H5.3z'}));
+    } else if (kind === 'store'){
+      [0,3.2,6.4].forEach(function(dy){
+        g.appendChild(el('ellipse', {cx:5, cy:2 + dy, rx:5, ry:1.8}));
+      });
+      g.appendChild(el('path', {d:'M0,2 L0,8.4 A5 1.8 0 0 0 10 8.4 L10 2', fill:'none', 'stroke-width':'1'}));
+    } else if (kind === 'external'){
+      g.appendChild(el('circle', {cx:5, cy:5, r:5, fill:'none', 'stroke-width':'1.1'}));
+      g.appendChild(el('ellipse', {cx:5, cy:5, rx:2.1, ry:5, fill:'none', 'stroke-width':'1'}));
+      g.appendChild(el('line', {x1:0, y1:5, x2:10, y2:5, 'stroke-width':'1'}));
+    } else if (kind === 'model' || kind === 'tool'){
+      g.appendChild(el('rect', {x:1.5, y:1.5, width:7, height:7, rx:1.5, fill:'none', 'stroke-width':'1.3'}));
+    } else {
+      g.appendChild(el('circle', {cx:5, cy:5, r:4}));
+    }
+    return g;
+  }
+
+  Object.keys(pos).forEach(function(id){
+    if (id.indexOf('grp:') === 0) return;
+    var n = nodeById[id];
+    if (!n) return;
+    var p = pos[id];
     var g = el('g', {'class':'sem-node', 'data-id':n.id, transform:'translate(' + p.x + ',' + p.y + ')'});
-    if (n.group && lastGroupSeen[p.col + ':' + n.group] === undefined){
-      lastGroupSeen[p.col + ':' + n.group] = true;
-      var tag = el('text', {x:0, y:-6, class:'sem-group-tag', fill: groupColor[n.group]});
-      tag.textContent = n.group;
+    if (n.group && !isBoxedGroup(n.group)){
+      var tag = el('text', {x:0, y:-6, class:'sem-group-tag', fill: groupColor[n.group] || (KIND_COLOR[n.kind])});
+      tag.textContent = n.group.toUpperCase();
       g.appendChild(tag);
     }
-    var accent = n.group ? groupColor[n.group] : (KIND_COLOR[n.kind] || 'var(--muted)');
-    var rect = el('rect', {width:NODE_W, height:NODE_H, rx:8, class:'sem-node-rect',
-      style:'--kind-color:' + (KIND_COLOR[n.kind]||'#64748b') + ';--accent:' + accent});
+    var kcolor = KIND_COLOR[n.kind] || '#64748b';
+    var rect = el('rect', {width:NODE_W, height:NODE_H, rx:9, class:'sem-node-rect'});
     g.appendChild(rect);
-    var bar = el('rect', {width:4, height:NODE_H, rx:2, fill:accent});
-    g.appendChild(bar);
-    var label = el('text', {x:14, y:22, class:'sem-node-label'});
+    var chip = el('rect', {x:9, y:(NODE_H-20)/2, width:20, height:20, rx:5, fill:kcolor, opacity:'0.16'});
+    g.appendChild(chip);
+    var iconG = icon(n.kind);
+    iconG.setAttribute('transform', 'translate(' + (9 + 5) + ',' + ((NODE_H-20)/2 + 5) + ')');
+    iconG.setAttribute('fill', kcolor);
+    iconG.setAttribute('stroke', kcolor);
+    g.appendChild(iconG);
+    var label = el('text', {x:38, y: n.sub ? 21 : 30, class:'sem-node-label'});
     label.textContent = n.label || n.id;
     g.appendChild(label);
     if (n.sub){
-      var sub = el('text', {x:14, y:38, class:'sem-node-sub'});
+      var sub = el('text', {x:38, y:36, class:'sem-node-sub'});
       sub.textContent = n.sub;
       g.appendChild(sub);
     }
-    var kindTag = el('text', {x:NODE_W-10, y:14, 'text-anchor':'end', class:'sem-node-kind',
-      fill: KIND_COLOR[n.kind] || 'var(--muted)'});
-    kindTag.textContent = (KIND_LABEL[n.kind] || n.kind || '').toUpperCase();
-    g.appendChild(kindTag);
     g.addEventListener('click', function(){ selectNode(n.id); });
     g.addEventListener('mouseenter', function(){ hoverNode(n.id); });
     g.addEventListener('mouseleave', function(){ hoverNode(null); });
@@ -2246,8 +2417,8 @@ SEMANTIC_GRAPH_JS = """
       g.classList.toggle('sem-dim', !!id && !connected[nid]);
     });
     edgeLayer.querySelectorAll('.sem-edge').forEach(function(p){
-      var isRelated = !id || connected[p.getAttribute('data-from')] && connected[p.getAttribute('data-to')]
-        && (p.getAttribute('data-from') === id || p.getAttribute('data-to') === id);
+      var isRelated = !id || (connected[p.getAttribute('data-from')] && connected[p.getAttribute('data-to')]
+        && (p.getAttribute('data-from') === id || p.getAttribute('data-to') === id));
       p.classList.toggle('sem-edge-active', !!id && isRelated);
       p.classList.toggle('sem-dim', !!id && !isRelated);
     });
@@ -2291,11 +2462,14 @@ SEMANTIC_GRAPH_JS = """
   if (panelClose) panelClose.addEventListener('click', function(){ panel.hidden = true; });
 
   if (legend){
-    Object.keys(KIND_LABEL).forEach(function(k){
-      if (!nodes.some(function(n){ return n.kind === k; })) return;
+    var LEGEND_MAP = {entry:['entry','cron'], service:['service','agent'], store:['store'], external:['external','model','tool']};
+    LEGEND_KINDS.forEach(function(pair){
+      var repKind = pair[0], label = pair[1];
+      var kindsForThis = LEGEND_MAP[repKind] || [repKind];
+      if (!nodes.some(function(n){ return kindsForThis.indexOf(n.kind) !== -1; })) return;
       var item = document.createElement('span');
       item.className = 'sem-legend-item';
-      item.innerHTML = '<i style="background:' + KIND_COLOR[k] + '"></i>' + KIND_LABEL[k];
+      item.innerHTML = '<i style="background:' + KIND_COLOR[repKind] + '"></i>' + label;
       legend.appendChild(item);
     });
   }
