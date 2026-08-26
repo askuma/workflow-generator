@@ -899,6 +899,7 @@ def detect_composition_root(root: Path) -> dict | None:
             has_middleware = bool(re.search(r'app\.add_middleware|app\.middleware|@app\.on_event', content))
             return {
                 'framework': 'FastAPI',
+                'uses_sentry': bool(re.search(r'sentry_sdk|SENTRY_DSN|@sentry/', content, re.I)),
                 'file': rel_path,
                 'has_middleware': has_middleware,
                 'detail': 'FastAPI application'
@@ -910,6 +911,7 @@ def detect_composition_root(root: Path) -> dict | None:
             has_middleware = bool(re.search(r'app\.before_request|app\.after_request|@app\.before_|@app\.teardown_', content))
             return {
                 'framework': 'Flask',
+                'uses_sentry': bool(re.search(r'sentry_sdk|SENTRY_DSN|@sentry/', content, re.I)),
                 'file': rel_path,
                 'has_middleware': has_middleware,
                 'detail': 'Flask application'
@@ -920,6 +922,7 @@ def detect_composition_root(root: Path) -> dict | None:
             rel_path = py_file.relative_to(root).as_posix()
             return {
                 'framework': 'Django',
+                'uses_sentry': bool(re.search(r'sentry_sdk|SENTRY_DSN|@sentry/', content, re.I)),
                 'file': rel_path,
                 'has_middleware': True,
                 'detail': 'Django settings'
@@ -938,6 +941,7 @@ def detect_composition_root(root: Path) -> dict | None:
             has_middleware = bool(re.search(r'app\.use\(|app\.middleware', content))
             return {
                 'framework': 'Express',
+                'uses_sentry': bool(re.search(r'sentry_sdk|SENTRY_DSN|@sentry/', content, re.I)),
                 'file': rel_path,
                 'has_middleware': has_middleware,
                 'detail': 'Express application'
@@ -948,6 +952,7 @@ def detect_composition_root(root: Path) -> dict | None:
             rel_path = js_file.relative_to(root).as_posix()
             return {
                 'framework': 'NestJS',
+                'uses_sentry': bool(re.search(r'sentry_sdk|SENTRY_DSN|@sentry/', content, re.I)),
                 'file': rel_path,
                 'has_middleware': True,
                 'detail': 'NestJS application'
@@ -1213,8 +1218,19 @@ display:none;max-width:320px;line-height:1.5}
 .graph-tooltip .tt-path{font-family:var(--mono);font-weight:600;word-break:break-all}
 .graph-tooltip .tt-meta{color:var(--muted);font-size:10.5px;margin-top:3px}
 .semantic-wrap{position:relative;display:flex;gap:16px;align-items:flex-start}
-.semantic-scroll{flex:1;overflow:auto;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:16px}
+.semantic-scroll{flex:1;overflow:auto;position:relative;background:var(--bg3);border:1px solid var(--border);
+border-radius:12px;padding:16px;background-image:radial-gradient(var(--border2) 1px,transparent 1px);
+background-size:22px 22px}
 #semantic-canvas{display:block}
+.sem-integrations-card{position:absolute;top:14px;left:14px;z-index:2;background:var(--bg2);
+border:1px solid var(--border2);border-radius:10px;padding:10px 12px;max-width:190px;
+box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.sem-integrations-card .sic-title{font-size:9.5px;font-weight:700;letter-spacing:.08em;
+text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.sem-integrations-card .sic-item{display:flex;align-items:center;gap:6px;font-size:11px;
+color:var(--text);padding:2px 0}
+.sem-integrations-card .sic-item i{width:6px;height:6px;border-radius:50%;background:var(--muted);
+flex-shrink:0;display:inline-block}
 .sem-group-box{fill:var(--gcolor,var(--border2));fill-opacity:.045;stroke:var(--gcolor,var(--border2));
 stroke-opacity:.5;stroke-width:1.25}
 .sem-node-rect{fill:var(--bg2);stroke:var(--border2);stroke-width:1.25;transition:stroke .15s,opacity .15s}
@@ -1229,8 +1245,13 @@ stroke-opacity:.5;stroke-width:1.25}
 .sem-edge.sem-edge-labeled{opacity:.85}
 .sem-edge.sem-edge-active{opacity:1;stroke:var(--text)!important}
 .sem-edge.sem-dim{opacity:.1}
-.sem-flow-dot{opacity:.9}
-.sem-edge-label{font-family:var(--sans);font-size:9.5px;fill:#f472b6;text-anchor:middle;font-weight:600}
+.sem-edge-flow{opacity:.9;stroke:#38bdf8;stroke-width:1.4;stroke-dasharray:5 9;
+stroke-linecap:round;transition:opacity .15s;animation:semEdgeFlow linear infinite}
+@media(prefers-reduced-motion:reduce){.sem-edge-flow{animation:none;opacity:0}}
+.sem-edge-flow.sem-edge-active{opacity:1}
+.sem-edge-flow.sem-dim{opacity:0}
+@keyframes semEdgeFlow{to{stroke-dashoffset:-28}}
+.sem-edge-label{font-family:var(--sans);font-size:9.5px;fill:var(--muted);text-anchor:middle;font-weight:600}
 .semantic-detail-panel{width:280px;flex-shrink:0;background:var(--bg3);border:1px solid var(--border);
 border-radius:12px;padding:16px;position:sticky;top:16px}
 .semantic-detail-panel[hidden]{display:none}
@@ -1247,9 +1268,11 @@ color:var(--text);border-radius:8px;padding:9px 10px;font-size:12px;font-weight:
 font-family:var(--sans)}
 .sem-detail-btn:hover{border-color:var(--muted)}
 .semantic-detail-placeholder{color:var(--muted);font-size:12.5px}
-.sem-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 4px;margin-bottom:14px}
+.sem-legend{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:2;
+display:flex;flex-wrap:wrap;justify-content:center;gap:6px;max-width:calc(100% - 28px)}
 .sem-legend-item{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);
-background:var(--bg3);border:1px solid var(--border);border-radius:999px;padding:5px 12px}
+background:var(--bg2);border:1px solid var(--border2);border-radius:999px;padding:5px 12px;
+box-shadow:0 2px 8px rgba(0,0,0,.2)}
 .sem-legend-item i{width:7px;height:7px;border-radius:50%;display:inline-block}
 .derivation{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px 18px;margin:0 0 12px}
 .derivation summary{cursor:pointer;font-size:12px;font-weight:600;color:var(--text);list-style:revert}
@@ -2279,9 +2302,29 @@ SEMANTIC_GRAPH_JS = """
     }
   });
 
-  function anchor(id, side){
+  // Fan-out staggering: when several edges leave one node (or arrive at
+  // one node), spread their anchor points along the node's edge instead of
+  // stacking them all on the vertical center — the curves separate cleanly
+  // the way the reference renderer's do.
+  var outSlots = {}, inSlots = {}, outSeen = {}, inSeen = {};
+  edges.forEach(function(e){
+    var s = nodeById[e.from], t = nodeById[e.to];
+    if (!s || !t) return;
+    if (s.group && s.group === t.group && isBoxedGroup(s.group)) return;
+    outSlots[e.from] = (outSlots[e.from] || 0) + 1;
+    inSlots[e.to] = (inSlots[e.to] || 0) + 1;
+  });
+  function slotOffset(id, slots, seen){
+    var n = slots[id] || 1;
+    var i = seen[id] = (seen[id] || 0) + 1;
+    if (n < 2) return 0;
+    var span = Math.min(NODE_H - 16, n * 9);
+    return (i - 1) / (n - 1) * span - span / 2;
+  }
+
+  function anchor(id, side, dy){
     var p = pos[id];
-    var y = p.y + NODE_H / 2;
+    var y = p.y + NODE_H / 2 + (dy || 0);
     return side === 'r' ? {x: p.x + NODE_W, y: y} : {x: p.x, y: y};
   }
 
@@ -2296,8 +2339,10 @@ SEMANTIC_GRAPH_JS = """
       d = 'M' + a.x + ',' + a.y + ' L' + b.x + ',' + b.y;
     } else {
       var sameCol = ps.layer === pt.layer;
-      a = sameCol ? {x: ps.x + NODE_W/2, y: ps.y + NODE_H} : anchor(s.id, ps.layer <= pt.layer ? 'r' : 'l');
-      b = sameCol ? {x: pt.x + NODE_W/2, y: pt.y} : anchor(t.id, ps.layer <= pt.layer ? 'l' : 'r');
+      var oOff = slotOffset(e.from, outSlots, outSeen);
+      var iOff = slotOffset(e.to, inSlots, inSeen);
+      a = sameCol ? {x: ps.x + NODE_W/2, y: ps.y + NODE_H} : anchor(s.id, ps.layer <= pt.layer ? 'r' : 'l', oOff);
+      b = sameCol ? {x: pt.x + NODE_W/2, y: pt.y} : anchor(t.id, ps.layer <= pt.layer ? 'l' : 'r', iOff);
       if (sameCol){
         d = 'M' + a.x + ',' + a.y + ' L' + b.x + ',' + b.y;
       } else {
@@ -2307,25 +2352,21 @@ SEMANTIC_GRAPH_JS = """
           + (b.x - sign*dx) + ',' + b.y + ' ' + b.x + ',' + b.y;
       }
     }
-    var accent = e.label ? '#f472b6' : (internal ? 'var(--muted)' : 'var(--border2)');
     var path = el('path', {
-      d:d, fill:'none', stroke:accent, 'stroke-width': e.label ? '1.75' : '1.4',
+      d:d, fill:'none', stroke:'var(--muted)', 'stroke-width': e.label ? '1.5' : '1.2',
       'marker-end':'url(#sem-arrow)', 'data-from':s.id, 'data-to':t.id,
       'class':'sem-edge' + (e.label ? ' sem-edge-labeled' : ''), id: pathId
     });
     edgeLayer.appendChild(path);
-    if (!internal){
-      var dot = el('circle', {r:'2.2', fill:accent, class:'sem-flow-dot'});
-      var motion = el('animateMotion', {
-        dur: (3.5 + (edgeIdx % 4) * 0.6) + 's', repeatCount:'indefinite',
-        begin: ((edgeIdx % 5) * 0.4) + 's'
-      });
-      var mpath = el('mpath', {href:'#' + pathId});
-      mpath.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '#' + pathId);
-      motion.appendChild(mpath);
-      dot.appendChild(motion);
-      edgeLayer.appendChild(dot);
-    }
+    // Flowing-current animation: a dashed overlay whose dash offset is
+    // animated by CSS — continuous movement along every path, like the
+    // reference renderer, with no per-frame JS.
+    var flow = el('path', {
+      d:d, fill:'none', 'data-from':s.id, 'data-to':t.id, 'class':'sem-edge-flow'
+    });
+    flow.style.animationDuration = (1.1 + (edgeIdx % 4) * 0.3) + 's';
+    flow.style.animationDelay = ((edgeIdx % 5) * 0.18) + 's';
+    edgeLayer.appendChild(flow);
     if (e.label){
       var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
       var txt = el('text', {x:mx, y: my - 7, 'text-anchor':'middle', class:'sem-edge-label'});
@@ -2335,10 +2376,6 @@ SEMANTIC_GRAPH_JS = """
   }
 
   var edgeIdx = 0;
-  edges.forEach(function(e){
-    var key = e.from + '>' + e.to;
-    if (groupInternalEdges[key]) return; // drawn separately, below
-  });
   Object.keys(groupInternalEdges).forEach(function(key){ drawEdge(groupInternalEdges[key], true); });
   edges.forEach(function(e){
     var key = e.from + '>' + e.to;
@@ -2416,7 +2453,7 @@ SEMANTIC_GRAPH_JS = """
       var nid = g.getAttribute('data-id');
       g.classList.toggle('sem-dim', !!id && !connected[nid]);
     });
-    edgeLayer.querySelectorAll('.sem-edge').forEach(function(p){
+    edgeLayer.querySelectorAll('.sem-edge, .sem-edge-flow').forEach(function(p){
       var isRelated = !id || (connected[p.getAttribute('data-from')] && connected[p.getAttribute('data-to')]
         && (p.getAttribute('data-from') === id || p.getAttribute('data-to') === id));
       p.classList.toggle('sem-edge-active', !!id && isRelated);
@@ -2825,6 +2862,35 @@ def build_semantic_graph(root: Path, analysis: dict) -> dict:
     else:
         comp_root_id = None
 
+    # 1b. GATEWAY node (nginx/Caddy/Traefik) — the true left edge of the
+    # request path when present: gateway -> app root.
+    gateway = analysis.get('gateway')
+    if gateway and gateway.get('type'):
+        gw_type = gateway['type']
+        nodes.append({
+            'id': 'gateway',
+            'label': f"{gw_type} proxy"[:28],
+            'kind': 'service',
+            'sub': 'reverse proxy' + (' + TLS' if gateway.get('tls') else ''),
+            'domain': _BRAND_DOMAINS.get(gw_type) or _BRAND_DOMAINS.get(gw_type.title()),
+        })
+        if comp_root_id:
+            edges.append({'from': 'gateway', 'to': comp_root_id, 'kind': 'triggers'})
+
+    # 1c. FRONTEND node — the served SPA/dashboard, an entry the app hands
+    # to browsers (mirrors how a reader thinks of "the web app").
+    frontend = analysis.get('frontend') or []
+    if frontend:
+        fe_names = ', '.join(f['name'] for f in frontend[:3])
+        nodes.append({
+            'id': 'frontend',
+            'label': 'Web app (SPA)',
+            'kind': 'entry',
+            'sub': fe_names[:40],
+        })
+        if comp_root_id:
+            edges.append({'from': comp_root_id, 'to': 'frontend', 'kind': 'triggers', 'label': 'serves SPA'})
+
     # 2. ENTRY nodes — one per file that declares routes, grouped by the
     # file's own name (routers/controllers are near-universally named after
     # the resource they own: users.py, items.py, login.py). This is more
@@ -3001,6 +3067,33 @@ def build_semantic_graph(root: Path, analysis: dict) -> dict:
             }
             nodes.append(external_nodes[ext_id])
 
+    # 5b. Sentry — synthesized from the composition root's own file content
+    # (sentry_sdk / SENTRY_DSN / @sentry/ seen where the app is constructed),
+    # since detect_external_sources() has no Sentry pattern. The edge comes
+    # from the app root because that's literally where the init call lives.
+    if comp_root and comp_root.get('uses_sentry') and 'external-sentry' not in external_nodes:
+        external_nodes['external-sentry'] = {
+            'id': 'external-sentry', 'label': 'Sentry', 'kind': 'external',
+            'domain': 'sentry.io', 'sub': 'error tracking',
+        }
+        nodes.append(external_nodes['external-sentry'])
+        if comp_root_id:
+            edges.append({'from': comp_root_id, 'to': 'external-sentry',
+                          'kind': 'calls', 'label': 'reports errors'})
+
+    # 5c. SMTP — an email service (detected via a real `def send_email`)
+    # implies an outbound SMTP dependency; give it an explicit sink node so
+    # the mail path reads end-to-end instead of stopping at the service.
+    email_svc_ids = [sid for sid, sn in service_nodes.items() if sn['label'] == 'Email service']
+    if email_svc_ids and 'external-smtp' not in external_nodes:
+        external_nodes['external-smtp'] = {
+            'id': 'external-smtp', 'label': 'SMTP email', 'kind': 'external',
+            'sub': 'outbound mail',
+        }
+        nodes.append(external_nodes['external-smtp'])
+        for sid in email_svc_ids:
+            edges.append({'from': sid, 'to': 'external-smtp', 'kind': 'calls'})
+
     # 6. CRON nodes (if detected). No reliable signal ties a specific cron
     # to a specific service without deeper analysis than this pass does, so
     # — consistent with "never fabricate a connection" — cron nodes only
@@ -3098,8 +3191,8 @@ def build_semantic_graph(root: Path, analysis: dict) -> dict:
     }
 
     top_integrations = [
-        {'id': ext_id.replace('external-', ''), 'label': nodes[i]['label'], 'domain': nodes[i].get('domain')}
-        for i, nodes_el in enumerate(nodes)
+        {'id': nodes_el['id'].replace('external-', ''), 'label': nodes_el['label'], 'domain': nodes_el.get('domain')}
+        for nodes_el in nodes
         if nodes_el['kind'] == 'external'
     ][:10]
 
@@ -3260,14 +3353,25 @@ faster. Treat this number as a starting estimate, not a capacity guarantee.</div
         sg_members_json = json.dumps({k: sorted(v) if isinstance(v, set) else list(v) for k, v in sg_members.items()})
         sg_stats = sg.get('stats') or {}
         stat_bits = ', '.join(f"{v} {k}" for k, v in sg_stats.items() if v)
+        top_integrations = sg.get('topIntegrations') or []
+        integrations_card = ''
+        if top_integrations:
+            integ_items = ''.join(
+                f'<div class="sic-item"><i></i>{i.get("label", i.get("id", ""))}</div>'
+                for i in top_integrations[:10]
+            )
+            integrations_card = (
+                f'<div class="sem-integrations-card"><div class="sic-title">Integrations</div>{integ_items}</div>'
+            )
         semantic_section = f"""
 <div class="section" id="section-semantic">
 <div class="section-title">Architecture Map — {len(sg_graph['nodes'])} components · {len(sg_graph.get('edges', []))} flows</div>
 <p style="font-size:11px;color:var(--muted);margin:-4px 0 16px">A curated view of how the system works: entry points, services, datastores, and external integrations — grouped by feature, not by file layout.{' Detected: ' + stat_bits + '.' if stat_bits else ''} Click any node for details; use <b>Show import details</b> to jump to the exact files behind it in the Codebase Graph below.</p>
-<div class="sem-legend" id="semantic-legend"></div>
 <div class="semantic-wrap">
 <div class="semantic-scroll">
 <svg id="semantic-canvas"></svg>
+{integrations_card}
+<div class="sem-legend" id="semantic-legend"></div>
 </div>
 <div id="semantic-detail-panel" class="semantic-detail-panel" hidden>
 <button id="semantic-detail-close" class="sem-detail-close" type="button" aria-label="Close">&times;</button>
@@ -3879,6 +3983,8 @@ def collect(root: Path, graph_detail: str = 'auto', access_log_path: str | None 
         'tools': tools,
         'agents': agents,
         'composition_root': composition_root,
+        'gateway': gateway,
+        'frontend': frontend,
         'llm': llm,
     })
     return {

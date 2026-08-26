@@ -407,3 +407,26 @@ def test_build_semantic_graph_caps_nodes_at_60(az_module, tmp_path):
     }
     sg = az.build_semantic_graph(root, analysis)
     assert len(sg['graph']['nodes']) <= 60
+
+
+def test_build_semantic_graph_top_integrations_populated(az_module, tmp_path):
+    # Regression test: topIntegrations used an undefined `ext_id` variable
+    # in its list comprehension (UnboundLocalError), only surfaced when
+    # build_semantic_graph() actually ran end-to-end against a repo with a
+    # real external integration (caught while regenerating the FastAPI
+    # template demo, not by any prior unit test).
+    az = az_module
+    root = write_project(tmp_path, {"app.py": "print('x')\n"})
+    analysis = {
+        'project_name': 'Demo',
+        'api_server': {'routes': []},
+        'storage': [],
+        'external_sources': [{'name': 'Stripe'}],
+        'crons': [],
+        'tools': [],
+        'agents': [],
+        'composition_root': None,
+        'llm': {'providers': []},
+    }
+    sg = az.build_semantic_graph(root, analysis)
+    assert sg['topIntegrations'] == [{'id': 'stripe', 'label': 'Stripe', 'domain': 'stripe.com'}]
