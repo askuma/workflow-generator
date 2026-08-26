@@ -119,7 +119,20 @@ The generated `WORKFLOW.html` always contains all of the following:
    from the same min() comparison used for the "Practical Throughput" stat, so this
    section and that stat can never disagree with each other.
 
-6. **Codebase Dependency Graph** — a force-directed graph of every source file (Python, JS/TS,
+6. **Architecture Map** — a curated, high-level view of *how the system works*, distinct from the
+   raw dependency graph below it: one node per entry point (grouped by router/controller file, not
+   by URL prefix), internal service, datastore, external integration, scheduled job, and — when
+   detected — AI agent/model/tool. Built entirely from already-detected facts plus a few light,
+   deterministic file-pattern checks (composition-root file, `crud`/`service`/`repository`-named
+   modules, tool-binding/agent-framework signatures); no LLM judgment is involved, so it's
+   identical across the CLI, MCP server, and this skill. Entry→service edges are only drawn when
+   the entry file actually references the service module's name — never a blanket fan-out. Click
+   any node for a detail panel (what it is, its source file); click **Show import details** to jump
+   to the Codebase Dependency Graph below with that component's exact files isolated and
+   highlighted. Nodes sharing a feature (inferred from router/service naming) cluster together with
+   a matching accent color and group label.
+
+7. **Codebase Dependency Graph** — a force-directed graph of every source file (Python, JS/TS,
    Go, Java, Rust, Ruby) as a node and every real, parser-resolved import as an edge; files that
    match an already-detected component (an LLM call, a database client, a queue) also get an edge
    to that component. Click a node to isolate its neighbors; hover for file details. Large
@@ -128,7 +141,7 @@ The generated `WORKFLOW.html` always contains all of the following:
    HTTP-entry edges are weighted with real observed request counts — the graph is explicit about
    which kind of edge is which so it's never mistaken for a traced request path.
 
-7. **Guided tour** — a spotlight walkthrough that dims the page and steps through each section
+8. **Guided tour** — a spotlight walkthrough that dims the page and steps through each section
    in turn (Back/Next/Skip), shown automatically the first time a generated report is opened.
    Steps for sections that don't apply to a given project (e.g. no detected routes, no graph)
    are skipped automatically. Replayable anytime via the `?` button next to the theme toggle.
