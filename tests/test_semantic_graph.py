@@ -1,3 +1,5 @@
+import json
+
 from conftest import write_project
 
 
@@ -500,3 +502,179 @@ def test_build_semantic_graph_orm_session_skips_ambiguous_multi_store(az_module,
     edges = sg['graph']['edges']
     service_to_store = [e for e in edges if e['from'] == 'service-crud' and e['to'].startswith('store-')]
     assert service_to_store == []
+
+
+# ── enrich_service_labels (local `claude` CLI shell-out, opt-in) ─────────────
+# All of these mock the subprocess boundary — a real `claude` process is never
+# invoked in tests: that would be non-deterministic, slow, and require auth.
+
+def _semantic_graph_with_one_service(az, tmp_path):
+    root = _fastapi_project(tmp_path)
+    analysis = {
+        'project_name': 'Demo',
+        'api_server': {'routes': []},
+        'storage': [],
+        'external_sources': [],
+        'crons': [],
+        'tools': [],
+        'agents': [],
+        'composition_root': az.detect_composition_root(root),
+        'llm': {'providers': []},
+    }
+    return root, az.build_semantic_graph(root, analysis)
+
+
+def test_enrich_service_labels_noop_when_claude_not_on_path(az_module, tmp_path, monkeypatch):
+    az = az_module
+    root, sg = _semantic_graph_with_one_service(az, tmp_path)
+    monkeypatch.setattr(az.shutil, 'which', lambda _: None)
+
+    def _boom(*a, **k):
+        raise AssertionError("subprocess.run must not be called when claude isn't on PATH")
+    monkeypatch.setattr(az.subprocess, 'run', _boom)
+
+    before = [dict(n) for n in sg['graph']['nodes']]
+    out = az.enrich_service_labels(root, sg)
+    assert out['graph']['nodes'] == before
+
+
+def test_collect_never_shells_out_when_enrich_labels_false(az_module, tmp_path, monkeypatch):
+    # The default (enrich_labels=False) path must never touch the subprocess
+    # boundary at all, regardless of whether claude happens to be on PATH.
+    az = az_module
+    root = _fastapi_project(tmp_path)
+
+    def _boom(*a, **k):
+        raise AssertionError("subprocess.run must not be called when enrich_labels=False")
+    monkeypatch.setattr(az.subprocess, 'run', _boom)
+    monkeypatch.setattr(az.shutil, 'which', lambda _: '/usr/bin/claude')
+
+    az.collect(root, enrich_labels=False)  # must not raise
+
+
+def test_enrich_service_labels_applies_valid_relabel(az_module, tmp_path, monkeypatch):
+    az = az_module
+    root, sg = _semantic_graph_with_one_service(az, tmp_path)
+    monkeypatch.setattr(az.shutil, 'which', lambda _: '/usr/bin/claude')
+
+    payload = json.dumps([
+        {'id': 'service-crud', 'label': 'User records', 'sub': 'reads/writes user rows', 'detail': 'x'},
+    ])
+
+    class _FakeProc:
+        returncode = 0
+        stdout = json.dumps({'result': payload})
+
+    monkeypatch.setattr(az.subprocess, 'run', lambda *a, **k: _FakeProc())
+    out = az.enrich_service_labels(root, sg)
+    crud = next(n for n in out['graph']['nodes'] if n['id'] == 'service-crud')
+    assert crud['label'] == 'User records'
+    assert crud['sub'] == 'reads/writes user rows'
+    # untouched fields
+    assert crud['kind'] == 'service'
+    assert crud['sourceRef'] == 'app/crud.py'
+
+
+def test_enrich_service_labels_truncates_oversized_fields(az_module, tmp_path, monkeypatch):
+    az = az_module
+    root, sg = _semantic_graph_with_one_service(az, tmp_path)
+    monkeypatch.setattr(az.shutil, 'which', lambda _: '/usr/bin/claude')
+
+    long_label = 'X' * 200
+    payload = json.dumps([{'id': 'service-crud', 'label': long_label}])
+
+    class _FakeProc:
+        returncode = 0
+        stdout = json.dumps({'result': payload})
+
+    monkeypatch.setattr(az.subprocess, 'run', lambda *a, **k: _FakeProc())
+    out = az.enrich_service_labels(root, sg)
+    crud = next(n for n in out['graph']['nodes'] if n['id'] == 'service-crud')
+    assert len(crud['label']) == az._ENRICH_LABEL_MAX
+
+
+def test_enrich_service_labels_ignores_unknown_ids(az_module, tmp_path, monkeypatch):
+    az = az_module
+    root, sg = _semantic_graph_with_one_service(az, tmp_path)
+    monkeypatch.setattr(az.shutil, 'which', lambda _: '/usr/bin/claude')
+    before_label = next(n for n in sg['graph']['nodes'] if n['id'] == 'service-crud')['label']
+
+    payload = json.dumps([{'id': 'service-does-not-exist', 'label': 'Whatever'}])
+
+    class _FakeProc:
+        returncode = 0
+        stdout = json.dumps({'result': payload})
+
+    monkeypatch.setattr(az.subprocess, 'run', lambda *a, **k: _FakeProc())
+    out = az.enrich_service_labels(root, sg)
+    crud = next(n for n in out['graph']['nodes'] if n['id'] == 'service-crud')
+    assert crud['label'] == before_label
+
+
+def test_enrich_service_labels_handles_malformed_json_response(az_module, tmp_path, monkeypatch):
+    az = az_module
+    root, sg = _semantic_graph_with_one_service(az, tmp_path)
+    monkeypatch.setattr(az.shutil, 'which', lambda _: '/usr/bin/claude')
+    before = [dict(n) for n in sg['graph']['nodes']]
+
+    class _FakeProc:
+        returncode = 0
+        stdout = 'not json at all'
+
+    monkeypatch.setattr(az.subprocess, 'run', lambda *a, **k: _FakeProc())
+    out = az.enrich_service_labels(root, sg)
+    assert out['graph']['nodes'] == before
+
+
+def test_enrich_service_labels_handles_nonzero_exit(az_module, tmp_path, monkeypatch):
+    az = az_module
+    root, sg = _semantic_graph_with_one_service(az, tmp_path)
+    monkeypatch.setattr(az.shutil, 'which', lambda _: '/usr/bin/claude')
+    before = [dict(n) for n in sg['graph']['nodes']]
+
+    class _FakeProc:
+        returncode = 1
+        stdout = ''
+
+    monkeypatch.setattr(az.subprocess, 'run', lambda *a, **k: _FakeProc())
+    out = az.enrich_service_labels(root, sg)
+    assert out['graph']['nodes'] == before
+
+
+def test_enrich_service_labels_handles_timeout(az_module, tmp_path, monkeypatch):
+    az = az_module
+    root, sg = _semantic_graph_with_one_service(az, tmp_path)
+    monkeypatch.setattr(az.shutil, 'which', lambda _: '/usr/bin/claude')
+    before = [dict(n) for n in sg['graph']['nodes']]
+
+    def _timeout(*a, **k):
+        raise az.subprocess.TimeoutExpired(cmd='claude', timeout=45)
+    monkeypatch.setattr(az.subprocess, 'run', _timeout)
+
+    out = az.enrich_service_labels(root, sg)
+    assert out['graph']['nodes'] == before
+
+
+def test_enrich_service_labels_noop_when_no_service_nodes(az_module, tmp_path, monkeypatch):
+    az = az_module
+    root = write_project(tmp_path, {"app.py": "print('x')\n"})
+    analysis = {
+        'project_name': 'Demo',
+        'api_server': {'routes': []},
+        'storage': [],
+        'external_sources': [],
+        'crons': [],
+        'tools': [],
+        'agents': [],
+        'composition_root': None,
+        'llm': {'providers': []},
+    }
+    sg = az.build_semantic_graph(root, analysis)
+    assert not any(n['kind'] == 'service' for n in sg['graph']['nodes'])
+    monkeypatch.setattr(az.shutil, 'which', lambda _: '/usr/bin/claude')
+
+    def _boom(*a, **k):
+        raise AssertionError("subprocess.run must not be called when there are no service nodes")
+    monkeypatch.setattr(az.subprocess, 'run', _boom)
+
+    az.enrich_service_labels(root, sg)  # must not raise

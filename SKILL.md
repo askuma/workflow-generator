@@ -58,7 +58,7 @@ Scan the current project and produce a complete visual system workflow with conc
 
 2. **Run the analyzer**:
    ```bash
-   python3 ~/.claude/skills/workflow-generator/scripts/analyze.py <project_root> <project_root>/WORKFLOW.html
+   python3 ~/.claude/skills/workflow-generator/scripts/analyze.py <project_root> <project_root>/WORKFLOW.html --enrich-labels
    ```
 
    Optional flags, appended after the two positional args:
@@ -66,6 +66,11 @@ Scan the current project and produce a complete visual system workflow with conc
      the codebase dependency graph's HTTP-entry edges, instead of import-direction only.
    - `--graph-detail auto|files|dirs` — force file-level or directory-level graph nodes. Default
      `auto` aggregates to directories once a project exceeds ~350 source files.
+   - `--enrich-labels` — always pass this when running via this skill (you're already an
+     authenticated `claude` session, so the cost is already accepted). It relabels
+     Architecture Map service nodes by having a local `claude -p` call actually read each
+     file, instead of the mechanical stem-dictionary label (see Architecture Map below).
+     It's a no-op everywhere else if `claude` isn't on PATH — never fails the scan.
 
 3. **Open the output**:
    ```bash
@@ -124,13 +129,20 @@ The generated `WORKFLOW.html` always contains all of the following:
    by URL prefix), internal service, datastore, external integration, scheduled job, and — when
    detected — AI agent/model/tool. Built entirely from already-detected facts plus a few light,
    deterministic file-pattern checks (composition-root file, `crud`/`service`/`repository`-named
-   modules, tool-binding/agent-framework signatures); no LLM judgment is involved, so it's
-   identical across the CLI, MCP server, and this skill. Entry→service edges are only drawn when
-   the entry file actually references the service module's name — never a blanket fan-out. Click
-   any node for a detail panel (what it is, its source file); click **Show import details** to jump
-   to the Codebase Dependency Graph below with that component's exact files isolated and
-   highlighted. Nodes sharing a feature (inferred from router/service naming) cluster together with
-   a matching accent color and group label.
+   modules, tool-binding/agent-framework signatures); by default no LLM judgment is involved, so
+   the node/edge set is identical across the CLI, MCP server, Copilot extension, and this skill.
+   Service-node **labels** are the one part of this that stays mechanical by default (a fixed
+   stem→label dictionary, so a generically-named file gets no node at all) — pass
+   `--enrich-labels` (always on when invoked via this skill; opt-in flag/param on CLI, MCP's
+   `generate_workflow` tool, and the Copilot extension's `enrichLabels` request field) to have a
+   local `claude -p` call read each service file and relabel it with what the code actually does.
+   It only ever renames existing nodes — never invents new ones — and silently no-ops if `claude`
+   isn't installed, so the deterministic output is always the floor. Entry→service edges are only
+   drawn when the entry file actually references the service module's name — never a blanket
+   fan-out. Click any node for a detail panel (what it is, its source file); click **Show import
+   details** to jump to the Codebase Dependency Graph below with that component's exact files
+   isolated and highlighted. Nodes sharing a feature (inferred from router/service naming) cluster
+   together with a matching accent color and group label.
 
 7. **Codebase Dependency Graph** — a force-directed graph of every source file (Python, JS/TS,
    Go, Java, Rust, Ruby) as a node and every real, parser-resolved import as an edge; files that

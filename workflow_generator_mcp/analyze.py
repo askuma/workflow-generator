@@ -8,7 +8,7 @@ Usage:
     python3 analyze.py [project_dir] [output_file]
 """
 
-import ast, datetime, json, re, sys
+import ast, datetime, json, re, shutil, subprocess, sys
 from pathlib import Path
 
 # ── Design tokens (identical to generated WORKFLOW.html) ─────────────────────
@@ -3238,6 +3238,116 @@ def build_semantic_graph(root: Path, analysis: dict) -> dict:
     }
 
 
+# Caps mirrored from build_semantic_graph's own node fields, so enriched
+# labels can never exceed what the deterministic path already guarantees.
+_ENRICH_LABEL_MAX = 28
+_ENRICH_SUB_MAX = 40
+_ENRICH_DETAIL_MAX = 200
+_ENRICH_FILE_EXCERPT_CHARS = 2000
+
+
+def enrich_service_labels(root: Path, semantic_graph: dict, *, timeout: int = 45) -> dict:
+    """Optional post-process: relabel `service` nodes using the user's local
+    `claude` CLI (headless/print mode) instead of the fixed stem dictionary
+    in build_semantic_graph(). Opt-in only (callers gate this on a flag),
+    and a no-op whenever `claude` isn't on PATH or anything about the call
+    fails — this must never turn a working deterministic scan into a broken
+    one. Only relabels nodes that already exist; never adds/removes nodes
+    or edges, consistent with this codebase's "never fabricate" policy.
+    """
+    if shutil.which('claude') is None:
+        return semantic_graph
+
+    service_nodes = [n for n in semantic_graph['graph']['nodes'] if n.get('kind') == 'service']
+    if not service_nodes:
+        return semantic_graph
+
+    entries = []
+    for n in service_nodes:
+        src = n.get('sourceRef')
+        excerpt = ''
+        if src:
+            try:
+                excerpt = (root / src).read_text(encoding='utf-8', errors='ignore')[:_ENRICH_FILE_EXCERPT_CHARS]
+            except OSError:
+                excerpt = ''
+        entries.append({
+            'id': n['id'],
+            'current_label': n.get('label'),
+            'current_sub': n.get('sub'),
+            'sourceRef': src,
+            'excerpt': excerpt,
+        })
+
+    prompt = (
+        "You are relabeling nodes in a software architecture diagram. For each "
+        "entry below, read the file excerpt and write a short label that reflects "
+        "what the code actually does, not the filename. Keep the same style as "
+        "the current labels (a short noun phrase ending in a generic-role word "
+        "like \"service\" or \"access\", e.g. \"Billing service\", \"User access\") "
+        "so the new labels stay visually consistent with the rest of the diagram. "
+        f"Hard limits: label <= {_ENRICH_LABEL_MAX} chars, sub <= {_ENRICH_SUB_MAX} chars, "
+        f"detail <= {_ENRICH_DETAIL_MAX} chars. "
+        "Respond with ONLY a JSON array, no prose, no markdown code fences, one "
+        "object per entry: [{\"id\": ..., \"label\": ..., \"sub\": ..., \"detail\": ...}]. "
+        "If an entry's excerpt doesn't tell you enough to improve on the current "
+        "label, just repeat the current label.\n\n"
+        + json.dumps(entries, indent=2)
+    )
+
+    try:
+        proc = subprocess.run(
+            ['claude', '-p', prompt, '--output-format', 'json'],
+            capture_output=True, text=True, timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        print(f"Note: label enrichment skipped ({e}).", file=sys.stderr)
+        return semantic_graph
+
+    if proc.returncode != 0 or not proc.stdout.strip():
+        print(f"Note: label enrichment skipped (claude exited {proc.returncode}).", file=sys.stderr)
+        return semantic_graph
+
+    try:
+        wrapper = json.loads(proc.stdout)
+        result_text = wrapper['result'] if isinstance(wrapper, dict) else proc.stdout
+    except (json.JSONDecodeError, KeyError, TypeError):
+        result_text = proc.stdout
+
+    result_text = result_text.strip()
+    if result_text.startswith('```'):
+        result_text = re.sub(r'^```[a-zA-Z]*\n?', '', result_text)
+        result_text = re.sub(r'\n?```$', '', result_text)
+
+    try:
+        updates = json.loads(result_text)
+    except json.JSONDecodeError:
+        print("Note: label enrichment skipped (unparseable response).", file=sys.stderr)
+        return semantic_graph
+
+    if not isinstance(updates, list):
+        return semantic_graph
+
+    by_id = {n['id']: n for n in service_nodes}
+    for u in updates:
+        if not isinstance(u, dict):
+            continue
+        node = by_id.get(u.get('id'))
+        if node is None:
+            continue
+        label = u.get('label')
+        if isinstance(label, str) and label.strip():
+            node['label'] = label.strip()[:_ENRICH_LABEL_MAX]
+        sub = u.get('sub')
+        if isinstance(sub, str) and sub.strip():
+            node['sub'] = sub.strip()[:_ENRICH_SUB_MAX]
+        detail = u.get('detail')
+        if isinstance(detail, str) and detail.strip():
+            node['detail'] = detail.strip()[:_ENRICH_DETAIL_MAX]
+
+    return semantic_graph
+
+
 def render_html(analysis: dict, project_name: str) -> str:
     today = datetime.date.today().strftime('%Y-%m-%d')
     cap = analysis['capacity']
@@ -3958,7 +4068,8 @@ def _aggregate_graph_dirs(nodes: dict, edges: list, depth: int = 2) -> tuple[dic
 
 # ── collect + main ─────────────────────────────────────────────────────────────
 
-def collect(root: Path, graph_detail: str = 'auto', access_log_path: str | None = None) -> dict:
+def collect(root: Path, graph_detail: str = 'auto', access_log_path: str | None = None,
+            enrich_labels: bool = False) -> dict:
     # Resolve once, up front: the graph builder compares Path objects for set
     # membership (js_paths, byId), and an unresolved relative root (the default —
     # `analyze.py .` is the most common invocation) makes every file path relative
@@ -4010,6 +4121,8 @@ def collect(root: Path, graph_detail: str = 'auto', access_log_path: str | None 
         'frontend': frontend,
         'llm': llm,
     })
+    if enrich_labels:
+        semantic_graph = enrich_service_labels(root, semantic_graph)
     return {
         'workers': workers,
         'gateway': gateway,
@@ -4038,6 +4151,7 @@ def main():
     argv = sys.argv[1:]
     graph_detail = 'auto'
     access_log_path = None
+    enrich_labels = False
     positional = []
     i = 0
     while i < len(argv):
@@ -4050,6 +4164,8 @@ def main():
             access_log_path = argv[i + 1]; i += 2; continue
         if a.startswith('--access-log='):
             access_log_path = a.split('=', 1)[1]; i += 1; continue
+        if a == '--enrich-labels':
+            enrich_labels = True; i += 1; continue
         positional.append(a); i += 1
 
     if graph_detail not in ('auto', 'files', 'dirs'):
@@ -4060,7 +4176,8 @@ def main():
     output = Path(positional[1]) if len(positional) > 1 else root / 'WORKFLOW.html'
 
     project_name = detect_project_name(root) or root.resolve().name.replace('-', ' ').replace('_', ' ').title()
-    analysis = collect(root, graph_detail=graph_detail, access_log_path=access_log_path)
+    analysis = collect(root, graph_detail=graph_detail, access_log_path=access_log_path,
+                        enrich_labels=enrich_labels)
 
     output.write_text(render_html(analysis, project_name))
 
