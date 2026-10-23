@@ -58,6 +58,16 @@ async def handle_list_tools() -> list[types.Tool]:
                         "description": "Open the generated file in the default browser.",
                         "default": True,
                     },
+                    "enrich_labels": {
+                        "type": "boolean",
+                        "description": (
+                            "Use the local `claude` CLI (if installed and on PATH) to "
+                            "replace mechanical service-node labels with ones derived "
+                            "from actually reading the code. No-op if `claude` isn't "
+                            "found."
+                        ),
+                        "default": False,
+                    },
                 },
                 "required": [],
             },
@@ -92,7 +102,11 @@ async def handle_call_tool(name: str, arguments: dict) -> list[types.TextContent
         return [types.TextContent(type="text", text=f"ERROR: Directory not found: {project_dir}")]
 
     project_name = _analyze.detect_project_name(project_dir) or project_dir.name.replace("-", " ").replace("_", " ").title()
-    analysis = _analyze.collect(project_dir)
+    # enrich_labels only affects generate_workflow's rendered HTML (analyze_workflow's
+    # trimmed JSON doesn't include semantic-graph labels at all), but it's harmless to
+    # thread through here unconditionally — analyze_workflow's schema doesn't declare
+    # the param, so well-behaved clients never set it for that tool.
+    analysis = _analyze.collect(project_dir, enrich_labels=bool(arguments.get("enrich_labels", False)))
     cap = analysis["capacity"]
 
     if name == "analyze_workflow":

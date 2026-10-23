@@ -27,7 +27,9 @@ app.post("/agent", async (req, res) => {
   res.write(`data: {"choices":[{"delta":{"content":"Scanning project at \`${projectDir}\`...\\n\\n"}}]}\n\n`);
 
   try {
-    const out = execFileSync("python3", [ANALYZE_PY, projectDir, outputFile], { encoding: "utf8" });
+    const args = [ANALYZE_PY, projectDir, outputFile];
+    if (req.body.enrichLabels) args.push("--enrich-labels");
+    const out = execFileSync("python3", args, { encoding: "utf8" });
     const lines = out.trim().split("\n").map(l => `> ${l}`).join("\n");
     res.write(`data: {"choices":[{"delta":{"content":"${lines.replace(/"/g,'\\"').replace(/\n/g,'\\n')}\\n\\nWorkflow diagram written to \`${outputFile}\`"}}]}\n\n`);
   } catch (err) {

@@ -58,7 +58,7 @@ Scan the current project and produce a complete visual system workflow with conc
 
 2. **Run the analyzer**:
    ```bash
-   python3 ~/.claude/skills/workflow-generator/scripts/analyze.py <project_root> <project_root>/WORKFLOW.html
+   python3 ~/.claude/skills/workflow-generator/scripts/analyze.py <project_root> <project_root>/WORKFLOW.html --enrich-labels
    ```
 
    Optional flags, appended after the two positional args:
@@ -66,6 +66,11 @@ Scan the current project and produce a complete visual system workflow with conc
      the codebase dependency graph's HTTP-entry edges, instead of import-direction only.
    - `--graph-detail auto|files|dirs` — force file-level or directory-level graph nodes. Default
      `auto` aggregates to directories once a project exceeds ~350 source files.
+   - `--enrich-labels` — always pass this when running via this skill (you're already an
+     authenticated `claude` session, so the cost is already accepted). It relabels
+     Architecture Map service nodes by having a local `claude -p` call actually read each
+     file, instead of the mechanical stem-dictionary label (see Architecture Map below).
+     It's a no-op everywhere else if `claude` isn't on PATH — never fails the scan.
 
 3. **Open the output**:
    ```bash
@@ -119,7 +124,27 @@ The generated `WORKFLOW.html` always contains all of the following:
    from the same min() comparison used for the "Practical Throughput" stat, so this
    section and that stat can never disagree with each other.
 
-6. **Codebase Dependency Graph** — a force-directed graph of every source file (Python, JS/TS,
+6. **Architecture Map** — a curated, high-level view of *how the system works*, distinct from the
+   raw dependency graph below it: one node per entry point (grouped by router/controller file, not
+   by URL prefix), internal service, datastore, external integration, scheduled job, and — when
+   detected — AI agent/model/tool. Built entirely from already-detected facts plus a few light,
+   deterministic file-pattern checks (composition-root file, `crud`/`service`/`repository`-named
+   modules, tool-binding/agent-framework signatures); by default no LLM judgment is involved, so
+   the node/edge set is identical across the CLI, MCP server, Copilot extension, and this skill.
+   Service-node **labels** are the one part of this that stays mechanical by default (a fixed
+   stem→label dictionary, so a generically-named file gets no node at all) — pass
+   `--enrich-labels` (always on when invoked via this skill; opt-in flag/param on CLI, MCP's
+   `generate_workflow` tool, and the Copilot extension's `enrichLabels` request field) to have a
+   local `claude -p` call read each service file and relabel it with what the code actually does.
+   It only ever renames existing nodes — never invents new ones — and silently no-ops if `claude`
+   isn't installed, so the deterministic output is always the floor. Entry→service edges are only
+   drawn when the entry file actually references the service module's name — never a blanket
+   fan-out. Click any node for a detail panel (what it is, its source file); click **Show import
+   details** to jump to the Codebase Dependency Graph below with that component's exact files
+   isolated and highlighted. Nodes sharing a feature (inferred from router/service naming) cluster
+   together with a matching accent color and group label.
+
+7. **Codebase Dependency Graph** — a force-directed graph of every source file (Python, JS/TS,
    Go, Java, Rust, Ruby) as a node and every real, parser-resolved import as an edge; files that
    match an already-detected component (an LLM call, a database client, a queue) also get an edge
    to that component. Click a node to isolate its neighbors; hover for file details. Large
@@ -127,8 +152,15 @@ The generated `WORKFLOW.html` always contains all of the following:
    import-direction only (static, honest) unless `--access-log` was supplied, in which case
    HTTP-entry edges are weighted with real observed request counts — the graph is explicit about
    which kind of edge is which so it's never mistaken for a traced request path.
+   Test files are split into a separate **Test Graph** section (tests plus the modules/services
+   they import or call), so they don't clutter the main graph.
+   Each has a **Flow | Graph** toggle over the same nodes/edges: Flow is a layered left-to-right
+   diagram (depth columns, every service its own node in the last column, cycles dashed), Graph
+   the force-directed view. Dots animate data both ways (filled = call, hollow = return); past 60
+   edges only the clicked/hovered node's paths animate. The Full System Architecture section is
+   collapsed by default.
 
-7. **Guided tour** — a spotlight walkthrough that dims the page and steps through each section
+8. **Guided tour** — a spotlight walkthrough that dims the page and steps through each section
    in turn (Back/Next/Skip), shown automatically the first time a generated report is opened.
    Steps for sections that don't apply to a given project (e.g. no detected routes, no graph)
    are skipped automatically. Replayable anytime via the `?` button next to the theme toggle.
