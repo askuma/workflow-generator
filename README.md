@@ -39,6 +39,22 @@ talk to Redis, OpenAI, etc. Large repos (350+ files) are automatically aggregate
 directory-level nodes so the graph stays readable; override with `--graph-detail files` or
 `--graph-detail dirs`.
 
+Test files (`tests/`, `test_*.py`, `conftest.py`, `*.spec.ts`, `*_test.go`, …) get their own
+**Test Graph** section below the main one, showing which modules and services each test reaches.
+Fixtures and test doubles name every service they exercise, so keeping them in the main graph
+buries the real dependency structure under service edges.
+
+Both sections have a **Flow | Graph** toggle over the same nodes and edges. **Flow** (the default
+up to 80 nodes) is a left-to-right layered diagram: columns are dependency depth from the sources
+(HTTP entry and files nothing imports), every detected service is its own node in the last column,
+and import cycles are drawn dashed. **Graph** is the force-directed view. Moving dots show data
+going both ways: a filled dot is the call/request, a hollow dot the return/response. On graphs
+with more than 60 edges, only the paths of the clicked or hovered node animate. Search, "hide
+isolated" and the selected node are shared between the two views.
+
+The older layered **Full System Architecture** diagram is collapsed by default, since the
+Architecture Map covers the same ground.
+
 By default the graph only shows what the *code* says (import direction, static "this file calls
 Redis"), which is honest but not the same as real traffic. Pass `--access-log /path/to/access.log`
 (any combined/common log format) to overlay real observed request counts onto the HTTP-entry

@@ -1163,12 +1163,12 @@ CSS = """
 :root{--bg:#0f172a;--bg2:#111827;--bg3:#161e2e;--bg4:#1a2535;
 --border:#1e293b;--border2:#263347;--text:#f1f5f9;--muted:#64748b;--dim:#334155;
 --sans:'IBM Plex Sans',system-ui,sans-serif;--mono:'JetBrains Mono',monospace}
-:root[data-theme="light"]{--bg:#f8fafc;--bg2:#ffffff;--bg3:#ffffff;--bg4:#f1f5f9;
+:root[data-theme="light"]{--bg:#eef2f7;--bg2:#ffffff;--bg3:#ffffff;--bg4:#f1f5f9;
 --border:#e2e8f0;--border2:#cbd5e1;--text:#0f172a;--muted:#64748b;--dim:#94a3b8}
-:root[data-theme="light"] body{background-image:radial-gradient(circle,#cbd5e1 1.4px,transparent 1.4px);background-size:24px 24px}
 :root[data-theme="light"] h1{color:#0f172a}
 :root[data-theme="light"] code{color:#0891b2}
-:root[data-theme="light"] .arch-wrap{box-shadow:0 1px 3px rgba(15,23,42,.06)}
+:root[data-theme="light"] .arch-wrap,:root[data-theme="light"] .graph-wrap,:root[data-theme="light"] .flow-wrap,
+:root[data-theme="light"] .semantic-scroll{box-shadow:0 1px 3px rgba(15,23,42,.08)}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.6;transition:background .25s,color .25s}
 .page{max-width:1440px;margin:0 auto;padding:40px 32px 80px}
@@ -1180,7 +1180,8 @@ box-shadow:0 2px 8px rgba(0,0,0,.15)}
 .theme-toggle:hover{border-color:var(--border2)}
 .subtitle{color:var(--muted);font-size:14px;margin-bottom:40px}
 .section{margin-bottom:56px}
-.section-title{font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+.section-intro{font-size:13px;line-height:1.6;color:var(--muted);margin:-8px 0 16px;max-width:1100px}
+.section-title{font-size:16px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
 color:var(--muted);border-bottom:1px solid var(--border);padding-bottom:10px;margin-bottom:24px}
 .stat-row{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:40px}
 .stat-card{background:var(--bg3);border:1px solid var(--border);border-radius:12px;
@@ -1194,20 +1195,54 @@ padding:24px;overflow-x:auto;position:relative}
 .graph-wrap{background:var(--bg3);border:1px solid var(--border);border-radius:14px;
 padding:16px;position:relative;height:640px}
 .graph-wrap canvas{width:100%;height:100%;display:block;border-radius:10px;cursor:grab}
-.graph-toolbar{position:absolute;top:26px;left:26px;right:26px;z-index:2;display:flex;
-align-items:center;gap:10px;flex-wrap:wrap}
-#graph-search{background:var(--bg2);
+.cg-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.cg-tabs{display:inline-flex;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:2px}
+.cg-tabs button{background:none;border:0;border-radius:6px;padding:5px 14px;font-size:12.5px;
+color:var(--muted);font-family:var(--sans);cursor:pointer}
+.cg-tabs button.on{background:var(--bg4);color:var(--text);font-weight:600}
+.cg-view[hidden],.cg-view-text[hidden]{display:none}
+.arch-details>summary{cursor:pointer;font-size:12px;color:var(--muted);margin-bottom:12px}
+.arch-details>summary:hover{color:var(--text)}
+.graph-search{background:var(--bg2);
 border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;
-color:var(--text);width:180px;font-family:var(--sans)}
-#graph-search:focus{outline:none;border-color:var(--border2)}
-#graph-hide-isolated-wrap{display:flex;align-items:center;gap:5px;font-size:11px;
+color:var(--text);width:200px;font-family:var(--sans)}
+.graph-search:focus{outline:none;border-color:var(--border2)}
+.graph-hide-isolated-wrap{display:flex;align-items:center;gap:5px;font-size:12px;
 color:var(--muted);white-space:nowrap;cursor:pointer;user-select:none}
-#graph-isolated-count{color:var(--muted)}
-#graph-reset-view{background:var(--bg2);border:1px solid var(--border);border-radius:8px;
-padding:6px 10px;font-size:11px;color:var(--muted);font-family:var(--sans);cursor:pointer}
-#graph-reset-view:hover{color:var(--text);border-color:var(--border2)}
+.graph-isolated-count{color:var(--muted)}
+.graph-reset-view{background:var(--bg2);border:1px solid var(--border);border-radius:8px;
+padding:6px 10px;font-size:12px;color:var(--muted);font-family:var(--sans);cursor:pointer}
+.graph-reset-view:hover{color:var(--text);border-color:var(--border2)}
+.flow-wrap{background:var(--bg3);border:1px solid var(--border);border-radius:14px;
+padding:16px;overflow:auto;max-height:860px}
+.flow-wrap svg{display:block}
+.flow-col-head{font-size:10px;font-weight:600;letter-spacing:.08em;fill:var(--muted);text-transform:uppercase}
+.flow-node{cursor:pointer}
+.flow-node rect.box{fill:var(--bg2);stroke:var(--border2);stroke-width:1}
+.flow-node:hover rect.box{stroke:var(--text)}
+.flow-node.sel rect.box{stroke:var(--text);stroke-width:2}
+.flow-node .lbl{font-size:11.5px;font-weight:600;fill:var(--text);font-family:var(--mono)}
+.flow-node .sub{font-size:9.5px;fill:var(--muted);font-family:var(--mono)}
+.flow-edge{fill:none;stroke-width:1.3;opacity:.4}
+.flow-edge.import{stroke:var(--muted)}
+.flow-edge.service{stroke:#60a5fa}
+.flow-edge.entry{stroke:#22c55e}
+.flow-edge.back{stroke-dasharray:4 3}
+.flow-dim{opacity:.08 !important}
+.flow-edge.hl{opacity:.95;stroke-width:1.8}
+.flow-arrow.import{fill:var(--muted)}.flow-arrow.service{fill:#60a5fa}.flow-arrow.entry{fill:#22c55e}
+.flow-dots{pointer-events:none}
+.flow-dot{display:none}
+.flow-dot.import{fill:var(--text)}.flow-dot.service{fill:#60a5fa}.flow-dot.entry{fill:#22c55e}
+.flow-dot.ret{fill:var(--bg3);stroke-width:1.3}
+.flow-dot.ret.import{stroke:var(--text)}.flow-dot.ret.service{stroke:#60a5fa}.flow-dot.ret.entry{stroke:#22c55e}
+.flow-legend .dot{width:7px;height:7px;border-radius:50%;background:var(--text);display:inline-block}
+.flow-legend .dot.ret{background:none;border:1.3px solid var(--text)}
+.flow-legend{display:flex;gap:14px 20px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px}
+.flow-legend span{display:flex;align-items:center;gap:6px}
+.flow-legend i{width:18px;height:0;border-top:2px solid;display:inline-block}
 .graph-legend{position:absolute;bottom:26px;left:26px;right:26px;z-index:2;display:flex;gap:14px 20px;
-flex-wrap:wrap;font-size:10.5px;color:var(--muted);background:rgba(0,0,0,.0)}
+flex-wrap:wrap;font-size:12px;color:var(--muted);background:rgba(0,0,0,.0)}
 .graph-legend span{display:flex;align-items:center;gap:5px}
 .graph-legend .lg-dot{width:9px;height:9px;border-radius:50%;background:#818cf8;display:inline-block}
 .graph-legend .lg-square{width:9px;height:9px;background:#eab308;display:inline-block;border-radius:2px}
@@ -1219,16 +1254,18 @@ display:none;max-width:320px;line-height:1.5}
 .graph-tooltip .tt-meta{color:var(--muted);font-size:10.5px;margin-top:3px}
 .semantic-wrap{position:relative;display:flex;gap:16px;align-items:flex-start}
 .semantic-scroll{flex:1;overflow:auto;position:relative;background:var(--bg3);border:1px solid var(--border);
-border-radius:12px;padding:16px;background-image:radial-gradient(var(--border2) 1px,transparent 1px);
-background-size:22px 22px}
+border-radius:12px;padding:16px}
+/* Integrations strip and legend sit in normal flow (strip above the map, legend
+   below) so they can never cover nodes, whatever the layout's size. */
+.semantic-scroll{display:flex;flex-direction:column;align-items:flex-start;gap:12px}
 #semantic-canvas{display:block}
-.sem-integrations-card{position:absolute;top:14px;left:14px;z-index:2;background:var(--bg2);
-border:1px solid var(--border2);border-radius:10px;padding:10px 12px;max-width:190px;
-box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.sem-integrations-card{order:-1;position:sticky;left:0;display:flex;flex-wrap:wrap;align-items:center;
+gap:6px 8px;background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:8px 12px;
+max-width:100%}
 .sem-integrations-card .sic-title{font-size:9.5px;font-weight:700;letter-spacing:.08em;
-text-transform:uppercase;color:var(--muted);margin-bottom:6px}
-.sem-integrations-card .sic-item{display:flex;align-items:center;gap:6px;font-size:11px;
-color:var(--text);padding:2px 0}
+text-transform:uppercase;color:var(--muted);margin-right:4px}
+.sem-integrations-card .sic-item{display:flex;align-items:center;gap:6px;font-size:12px;
+color:var(--text);padding:2px 8px;background:var(--bg4);border-radius:999px}
 .sem-integrations-card .sic-item i{width:6px;height:6px;border-radius:50%;background:var(--muted);
 flex-shrink:0;display:inline-block}
 .sem-group-box{fill:var(--gcolor,var(--border2));fill-opacity:.045;stroke:var(--gcolor,var(--border2));
@@ -1268,9 +1305,8 @@ color:var(--text);border-radius:8px;padding:9px 10px;font-size:12px;font-weight:
 font-family:var(--sans)}
 .sem-detail-btn:hover{border-color:var(--muted)}
 .semantic-detail-placeholder{color:var(--muted);font-size:12.5px}
-.sem-legend{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:2;
-display:flex;flex-wrap:wrap;justify-content:center;gap:6px;max-width:calc(100% - 28px)}
-.sem-legend-item{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);
+.sem-legend{position:sticky;left:0;display:flex;flex-wrap:wrap;gap:6px;max-width:100%}
+.sem-legend-item{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);
 background:var(--bg2);border:1px solid var(--border2);border-radius:999px;padding:5px 12px;
 box-shadow:0 2px 8px rgba(0,0,0,.2)}
 .sem-legend-item i{width:7px;height:7px;border-radius:50%;display:inline-block}
@@ -1512,22 +1548,30 @@ EDGE_JS = """
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(drawEdges, 150);
   });
+  // Collapsed by default; the overlay can only be measured once it's open.
+  var archDetails = document.getElementById('arch-details');
+  if (archDetails) archDetails.addEventListener('toggle', drawEdges);
 
   drawEdges();
 })();
 """
 
 GRAPH_JS = """
-(function(){
-  var dataEl = document.getElementById('graph-data');
+// One instance per graph canvas; P is the element-id prefix (graph-, test-graph-).
+// Returns {select, isolate, fit, onSelect} for the Codebase section controller.
+function wfgenCodeGraph(P){
+  var dataEl = document.getElementById(P + 'data');
   if (!dataEl) return;
   var data = JSON.parse(dataEl.textContent);
-  var canvas = document.getElementById('code-graph');
+  var canvas = document.getElementById(P + 'canvas');
   if (!canvas || !data.nodes.length) return;
   var ctx = canvas.getContext('2d');
   var wrap = canvas.parentElement;
-  var tooltip = document.getElementById('graph-tooltip');
+  var tooltip = document.getElementById(P + 'tooltip');
   var reduceMotion = !window.matchMedia('(prefers-reduced-motion: no-preference)').matches;
+  var animateEl = document.getElementById(P + 'animate');
+  function animateOn(){ return animateEl ? animateEl.checked : !reduceMotion; }
+  var api = {onSelect: null};
 
   function hashStr(s){
     var h = 2166136261;
@@ -1652,9 +1696,9 @@ GRAPH_JS = """
     selected = null; hovered = null; searchMatch = null;
   }
 
-  var hideIsolatedEl = document.getElementById('graph-hide-isolated');
-  var isolatedCountEl = document.getElementById('graph-isolated-count');
-  var hideIsolatedWrapEl = document.getElementById('graph-hide-isolated-wrap');
+  var hideIsolatedEl = document.getElementById(P + 'hide-isolated');
+  var isolatedCountEl = document.getElementById(P + 'isolated-count');
+  var hideIsolatedWrapEl = document.getElementById(P + 'hide-isolated-wrap');
   if (isolatedCountEl) isolatedCountEl.textContent = isolatedCount ? ' (' + isolatedCount + ')' : '';
   if (!isolatedCount && hideIsolatedWrapEl) hideIsolatedWrapEl.style.display = 'none';
   if (hideIsolatedEl) hideIsolatedEl.checked = isolatedCount > 0;
@@ -1663,7 +1707,7 @@ GRAPH_JS = """
     dragging = null; panStart = null; moved = false;
     buildLayout(hideIsolatedEl.checked);
   });
-  var resetViewEl = document.getElementById('graph-reset-view');
+  var resetViewEl = document.getElementById(P + 'reset-view');
   if (resetViewEl) resetViewEl.addEventListener('click', function(){ fitView(); });
 
   function worldToScreen(x, y){
@@ -1726,7 +1770,7 @@ GRAPH_JS = """
       ctx.stroke();
       ctx.globalAlpha = 1;
 
-      if (!reduceMotion && !dim){
+      if (animateOn() && !dim){
         if (!l._phase) l._phase = l.phase;
         // Real observed-traffic weight (from --access-log) speeds the
         // particle up (log-scaled — raw request counts span orders of
@@ -1734,13 +1778,17 @@ GRAPH_JS = """
         var hasTraffic = l.kind === 'entry' && l.w;
         var speedMul = hasTraffic ? Math.min(5, 1 + Math.log2(l.w + 1) * 0.5) : 1;
         l._phase = (l._phase + dt * particleSpeed * speedMul) % 1;
-        [l._phase, (l._phase + 0.5) % 1].forEach(function(ph){
+        // To and fro: a filled dot carries the call/request source -> target,
+        // a hollow one carries the return/response back, half a cycle apart.
+        var dotColor = hasTraffic ? '#f59e0b' : (l.kind === 'service' ? '#60a5fa' : colors.muted);
+        [[l._phase, false], [1 - (l._phase + 0.5) % 1, true]].forEach(function(pr){
+          var ph = pr[0];
           var px = p1[0] + (p2[0]-p1[0]) * ph, py = p1[1] + (p2[1]-p1[1]) * ph;
           ctx.beginPath();
-          ctx.arc(px, py, 1.8, 0, 7);
-          ctx.fillStyle = hasTraffic ? '#f59e0b' : (l.kind === 'service' ? '#60a5fa' : colors.muted);
+          ctx.arc(px, py, 1.9, 0, 7);
           ctx.globalAlpha = 0.9;
-          ctx.fill();
+          if (pr[1]){ ctx.fillStyle = colors.bg; ctx.fill(); ctx.strokeStyle = dotColor; ctx.lineWidth = 1.2; ctx.stroke(); }
+          else { ctx.fillStyle = dotColor; ctx.fill(); }
           ctx.globalAlpha = 1;
         });
       }
@@ -1883,9 +1931,10 @@ GRAPH_JS = """
     var r = canvas.getBoundingClientRect();
     var hit = pick(e.clientX - r.left, e.clientY - r.top);
     selected = hit ? (selected === hit.id ? null : hit.id) : null;
+    if (api.onSelect) api.onSelect(selected);
   });
 
-  var search = document.getElementById('graph-search');
+  var search = document.getElementById(P + 'search');
   if (search){
     search.addEventListener('input', function(){
       var q = search.value.trim().toLowerCase();
@@ -1896,10 +1945,10 @@ GRAPH_JS = """
     });
   }
 
-  // Hook for the Architecture Map's "Show import details" drill-down: highlights
-  // a given set of file/dir node ids (a semantic component's members) the same
-  // way a search match does, without requiring the user to type anything.
-  window.__wfgenIsolateGraphNodes = function(ids, label){
+  // Used by the Architecture Map's "Show import details" drill-down (via the
+  // Codebase controller): highlights a semantic component's member files the
+  // same way a search match does, without requiring the user to type anything.
+  api.isolate = function(ids, label){
     var set = {};
     (ids || []).forEach(function(id){ set[id] = true; });
     searchMatch = Object.keys(set).length ? set : null;
@@ -1935,7 +1984,415 @@ GRAPH_JS = """
   document.addEventListener('wfgen-tour-end', armPulseIfReady);
   running = true;
   requestAnimationFrame(draw);
-})();
+
+  api.select = function(id){ selected = id && byId[id] ? id : null; };
+  // The canvas measures 0x0 while its view is hidden, so re-fit on show.
+  api.fit = function(){ fitView(); };
+  return api;
+}
+"""
+
+# Flow view of the Codebase section: the force graph's exact node/edge set (it
+# reads the same <P>data JSON), laid out as a left-to-right layered diagram.
+# Columns are longest-path depth from the sources (HTTP entry / files nothing
+# imports); detected services always form the last column (as compact
+# one-line nodes); zero-degree nodes get their own "isolated" column so nothing
+# in the graph is dropped. Import cycles are broken by DFS back-edge removal for
+# layering only; the back edges are still drawn, dashed.
+#
+# Data movement: each animated edge carries a filled dot source -> target (the
+# call / request) and a hollow dot back (the return / response). To keep it
+# readable, idle animation only runs on graphs of <= _FLOW_IDLE_ANIM_EDGES edges;
+# once a node is selected or hovered, only its traced paths animate.
+_FLOW_IDLE_ANIM_EDGES = 60
+_FLOW_MAX_NODES = 80
+FLOW_JS = """
+function wfgenFlow(P){
+  var dataEl = document.getElementById(P + 'data');
+  var svg = document.getElementById(P + 'flow-canvas');
+  if (!dataEl || !svg) return null;
+  var data = JSON.parse(dataEl.textContent);
+  if (!(data.nodes || []).length) return null;
+  var wrap = svg.parentElement;
+  var reduceMotion = !window.matchMedia('(prefers-reduced-motion: no-preference)').matches;
+  var animateEl = document.getElementById(P + 'animate');
+  var IDLE_ANIM_EDGES = """ + str(_FLOW_IDLE_ANIM_EDGES) + """;
+  var api = {onSelect: null};
+
+  function hashStr(s){
+    var h = 2166136261;
+    for (var i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0);
+  }
+  function nodeColor(n){
+    if (n.kind === 'service' || n.kind === 'entry') return n.color;
+    return 'hsl(' + (hashStr(n.pkg) % 360) + ',62%,58%)';
+  }
+  function isSink(n){ return n.kind === 'service'; }
+  function el(tag, attrs, text){
+    var e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  var W = 210, H = 40, HS = 28, VGAP = 10, HGAP = 110, PAD = 20, HEAD = 26;
+  var byId, links, ids, out, inn, pos, nodeEls, edgeEls, dotG;
+  var selected = null, hovered = null, highlight = null;
+
+  function build(hideIsolated){
+    var all = data.nodes;
+    var degAll = {};
+    var idsAll = {};
+    all.forEach(function(n){ idsAll[n.id] = true; degAll[n.id] = 0; });
+    (data.links || []).forEach(function(l){
+      if (idsAll[l.s] && idsAll[l.t]){ degAll[l.s]++; degAll[l.t]++; }
+    });
+    var nodes = hideIsolated ? all.filter(function(n){ return degAll[n.id]; }) : all;
+    byId = {};
+    nodes.forEach(function(n){ byId[n.id] = n; });
+    links = (data.links || []).filter(function(l){ return byId[l.s] && byId[l.t]; });
+    ids = nodes.map(function(n){ return n.id; }).sort();
+    out = {}; inn = {};
+    var deg = {};
+    ids.forEach(function(id){ out[id] = []; inn[id] = []; deg[id] = 0; });
+    links.forEach(function(l){ out[l.s].push(l.t); inn[l.t].push(l.s); deg[l.s]++; deg[l.t]++; });
+
+    // ---- Break cycles (DFS, deterministic id order) so layering terminates ----
+    var back = {}, state = {};
+    ids.forEach(function(root){
+      if (state[root]) return;
+      var stack = [[root, 0]];
+      state[root] = 1;
+      while (stack.length){
+        var top = stack[stack.length - 1], v = top[0], kids = out[v].slice().sort();
+        if (top[1] < kids.length){
+          var w = kids[top[1]++];
+          if (state[w] === 1) back[v + '>' + w] = true;
+          else if (!state[w]){ state[w] = 1; stack.push([w, 0]); }
+        } else { state[v] = 2; stack.pop(); }
+      }
+    });
+
+    // ---- Longest-path layering over non-service nodes ----
+    var layer = {}, indeg = {};
+    ids.forEach(function(id){ indeg[id] = 0; });
+    links.forEach(function(l){
+      if (back[l.s + '>' + l.t] || isSink(byId[l.t]) || isSink(byId[l.s])) return;
+      indeg[l.t]++;
+    });
+    var q = ids.filter(function(id){ return !isSink(byId[id]) && !indeg[id]; });
+    q.forEach(function(id){ layer[id] = 0; });
+    for (var qi = 0; qi < q.length; qi++){
+      var v = q[qi];
+      out[v].forEach(function(w){
+        if (back[v + '>' + w] || isSink(byId[w])) return;
+        layer[w] = Math.max(layer[w] || 0, layer[v] + 1);
+        if (--indeg[w] === 0) q.push(w);
+      });
+    }
+    var maxL = 0;
+    ids.forEach(function(id){
+      if (isSink(byId[id]) || !deg[id]) return;
+      if (layer[id] === undefined) layer[id] = 0;
+      maxL = Math.max(maxL, layer[id]);
+    });
+    var hasSinks = ids.some(function(id){ return isSink(byId[id]) && deg[id]; });
+    var sinkCol = maxL + 1, isoCol = maxL + (hasSinks ? 2 : 1);
+    var hasIso = false;
+    ids.forEach(function(id){
+      if (!deg[id]){ layer[id] = isoCol; hasIso = true; }
+      else if (isSink(byId[id])) layer[id] = sinkCol;
+    });
+    var nCols = hasIso ? isoCol + 1 : (hasSinks ? sinkCol + 1 : maxL + 1);
+    var cols = [];
+    for (var c = 0; c < nCols; c++) cols.push([]);
+    ids.forEach(function(id){ cols[layer[id]].push(id); });
+    cols.forEach(function(col){
+      col.sort(function(a, b){
+        var na = byId[a], nb = byId[b];
+        return (na.kind === 'entry' ? -1 : 0) - (nb.kind === 'entry' ? -1 : 0)
+          || (na.pkg || '').localeCompare(nb.pkg || '') || na.label.localeCompare(nb.label);
+      });
+    });
+
+    // ---- Crossing reduction: alternating barycenter sweeps ----
+    var rank = {};
+    function reRank(){ cols.forEach(function(col){ col.forEach(function(id, i){ rank[id] = i; }); }); }
+    reRank();
+    function bary(id, nbrs, prevRank){
+      var sum = 0, n = 0;
+      nbrs.forEach(function(w){ if (layer[w] !== layer[id]){ sum += rank[w]; n++; } });
+      return n ? sum / n : prevRank;
+    }
+    for (var sweep = 0; sweep < 6; sweep++){
+      var down = sweep % 2 === 0;
+      var order = cols.map(function(_, i){ return down ? i : cols.length - 1 - i; });
+      order.forEach(function(ci){
+        if (ci === isoCol && hasIso) return;
+        var col = cols[ci], key = {};
+        col.forEach(function(id){ key[id] = bary(id, down ? inn[id] : out[id], rank[id]); });
+        col.sort(function(a, b){ return key[a] - key[b] || rank[a] - rank[b]; });
+        col.forEach(function(id, i){ rank[id] = i; });
+      });
+    }
+    reRank();
+
+    // ---- Geometry: services are one-line nodes so a long services column stays short ----
+    function hOf(id){ return isSink(byId[id]) ? HS : H; }
+    var colH = cols.map(function(col){
+      return col.reduce(function(acc, id){ return acc + hOf(id) + VGAP; }, 0) - VGAP;
+    });
+    var maxColH = Math.max.apply(null, colH.concat([0]));
+    var totalH = PAD * 2 + HEAD + maxColH;
+    pos = {};
+    cols.forEach(function(col, ci){
+      var y = PAD + HEAD + Math.max(0, maxColH - colH[ci]) / 2 * 0.35;
+      col.forEach(function(id){
+        pos[id] = {x: PAD + ci * (W + HGAP), y: y, h: hOf(id)};
+        y += hOf(id) + VGAP;
+      });
+    });
+    var totalW = PAD * 2 + nCols * W + (nCols - 1) * HGAP;
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    svg.setAttribute('width', totalW);
+    svg.setAttribute('height', totalH);
+    svg.setAttribute('viewBox', '0 0 ' + totalW + ' ' + totalH);
+
+    var defs = el('defs', {});
+    ['import', 'service', 'entry'].forEach(function(k){
+      var m = el('marker', {id: P + 'arrow-' + k, viewBox: '0 0 10 10', refX: '9', refY: '5',
+        markerWidth: '6', markerHeight: '6', orient: 'auto'});
+      m.appendChild(el('path', {d: 'M0,0 L10,5 L0,10 z', 'class': 'flow-arrow ' + k}));
+      defs.appendChild(m);
+    });
+    svg.appendChild(defs);
+
+    cols.forEach(function(col, ci){
+      var head = ci === isoCol && hasIso ? 'Isolated (' + col.length + ')'
+        : ci === sinkCol && hasSinks ? 'External services (' + col.length + ')'
+        : ci === 0 ? 'Sources (' + col.length + ')'
+        : 'Depth ' + ci + ' (' + col.length + ')';
+      svg.appendChild(el('text', {x: PAD + ci * (W + HGAP), y: PAD + 10, 'class': 'flow-col-head'}, head));
+    });
+
+    // Spread a node's anchors along its side in the order of the far end's y,
+    // so parallel edges fan out instead of stacking on the midpoint.
+    var outE = {}, inE = {};
+    links.forEach(function(l){ (outE[l.s] = outE[l.s] || []).push(l); (inE[l.t] = inE[l.t] || []).push(l); });
+    var offS = new Map(), offT = new Map();
+    function spread(map, list, far, near){
+      list.sort(function(a, b){ return pos[a[far]].y - pos[b[far]].y; });
+      var n = list.length, span = Math.min(pos[list[0][near]].h - 10, n * 4);
+      list.forEach(function(l, i){ map.set(l, n < 2 ? 0 : i / (n - 1) * span - span / 2); });
+    }
+    Object.keys(outE).forEach(function(id){ spread(offS, outE[id], 't', 's'); });
+    Object.keys(inE).forEach(function(id){ spread(offT, inE[id], 's', 't'); });
+
+    var edgeG = el('g', {}), nodeG = el('g', {});
+    dotG = el('g', {'class': 'flow-dots'});
+    svg.appendChild(edgeG); svg.appendChild(dotG); svg.appendChild(nodeG);
+    edgeEls = [];
+    links.forEach(function(l){
+      var a = pos[l.s], b = pos[l.t];
+      var x1 = a.x + W, y1 = a.y + a.h / 2 + offS.get(l);
+      var x2 = b.x, y2 = b.y + b.h / 2 + offT.get(l);
+      var isBack = x2 <= x1, d;
+      if (!isBack){
+        var mx = (x1 + x2) / 2;
+        d = 'M' + x1 + ',' + y1 + ' C' + mx + ',' + y1 + ' ' + mx + ',' + y2 + ' ' + (x2 - 2) + ',' + y2;
+      } else {
+        // Backward / same-column edge: loop out right, come back in from the left.
+        var bend = Math.max(40, (x1 - x2) * 0.25);
+        d = 'M' + x1 + ',' + y1 + ' C' + (x1 + bend) + ',' + y1 + ' ' + (x2 - bend) + ',' + y2 + ' ' + (x2 - 2) + ',' + y2;
+      }
+      var kind = l.kind === 'service' || l.kind === 'entry' ? l.kind : 'import';
+      var p = el('path', {d: d, 'class': 'flow-edge ' + kind + (isBack ? ' back' : ''),
+        'marker-end': 'url(#' + P + 'arrow-' + kind + ')'});
+      if (l.w && l.w > 1) p.style.strokeWidth = Math.min(4, 1.3 + Math.log2(l.w) * 0.4);
+      p.appendChild(el('title', {}, l.s + ' \\u2192 ' + byId[l.t].label + (l.w > 1 ? ' (' + l.w + ')' : '')));
+      edgeG.appendChild(p);
+      var out1 = el('circle', {r: 2.6, 'class': 'flow-dot ' + kind});
+      var ret1 = el('circle', {r: 2.4, 'class': 'flow-dot ret ' + kind});
+      dotG.appendChild(out1); dotG.appendChild(ret1);
+      edgeEls.push({l: l, el: p, out: out1, ret: ret1, len: 0, phase: (hashStr(l.s + l.t) % 1000) / 1000});
+    });
+
+    nodeEls = {};
+    ids.forEach(function(id){
+      var n = byId[id], p = pos[id];
+      var g = el('g', {'class': 'flow-node', transform: 'translate(' + p.x + ',' + p.y + ')'});
+      g.appendChild(el('rect', {'class': 'box', width: W, height: p.h, rx: 7}));
+      g.appendChild(el('rect', {width: 4, height: p.h - 8, x: 3, y: 4, rx: 2, fill: nodeColor(n)}));
+      var label = (n.icon ? n.icon + ' ' : '') + n.label;
+      if (isSink(n)){
+        if (label.length > 22) label = label.slice(0, 21) + '\\u2026';
+        g.appendChild(el('text', {'class': 'lbl', x: 14, y: p.h / 2 + 4}, label));
+        g.appendChild(el('text', {'class': 'sub', x: W - 8, y: p.h / 2 + 3.5, 'text-anchor': 'end'}, n.cat || 'service'));
+      } else {
+        if (label.length > 27) label = label.slice(0, 26) + '\\u2026';
+        g.appendChild(el('text', {'class': 'lbl', x: 14, y: 17}, label));
+        var sub = n.kind === 'file' ? (n.id.indexOf('/') !== -1 ? n.id.slice(0, n.id.lastIndexOf('/')) : '(root)') + ' \\u00b7 ' + n.loc + ' loc'
+          : n.kind === 'dir' ? (n.file_count || 0) + ' files \\u00b7 ' + n.loc + ' loc'
+          : 'entry point';
+        if (sub.length > 34) sub = '\\u2026' + sub.slice(sub.length - 33);
+        g.appendChild(el('text', {'class': 'sub', x: 14, y: 31}, sub));
+      }
+      g.appendChild(el('title', {}, n.id + '\\n' + inn[id].length + ' in \\u00b7 ' + out[id].length + ' out'));
+      g.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        api.select(selected === id ? null : id);
+        if (api.onSelect) api.onSelect(selected);
+      });
+      g.addEventListener('mouseenter', function(){ hovered = id; paint(); });
+      g.addEventListener('mouseleave', function(){ if (hovered === id){ hovered = null; paint(); } });
+      nodeG.appendChild(g);
+      nodeEls[id] = g;
+    });
+    if (selected && !byId[selected]) selected = null;
+    paint();
+  }
+
+  function reach(start, adj){
+    var seen = {}, stack = [start];
+    seen[start] = true;
+    while (stack.length){
+      adj[stack.pop()].forEach(function(w){ if (!seen[w]){ seen[w] = true; stack.push(w); } });
+    }
+    return seen;
+  }
+
+  // Which nodes/edges are "on": a selection traces everything upstream and
+  // downstream; a hover (with nothing selected) shows direct neighbours only;
+  // a search / drill-down highlight shows the matched set and edges among it.
+  var activeEdges = null;
+  function paint(){
+    var nodeOn = null, edgeOn = null;
+    if (selected){
+      var up = reach(selected, inn), dn = reach(selected, out);
+      nodeOn = function(id){ return up[id] || dn[id]; };
+      edgeOn = function(l){ return (up[l.t] && up[l.s]) || (dn[l.s] && dn[l.t]); };
+    } else if (hovered){
+      nodeOn = function(id){ return id === hovered || out[hovered].indexOf(id) !== -1 || inn[hovered].indexOf(id) !== -1; };
+      edgeOn = function(l){ return l.s === hovered || l.t === hovered; };
+    } else if (highlight){
+      nodeOn = function(id){ return highlight[id]; };
+      edgeOn = function(l){ return highlight[l.s] && highlight[l.t]; };
+    }
+    ids.forEach(function(id){
+      nodeEls[id].classList.toggle('flow-dim', !!nodeOn && !nodeOn(id));
+      nodeEls[id].classList.toggle('sel', id === selected);
+    });
+    activeEdges = [];
+    edgeEls.forEach(function(e){
+      var on = !edgeOn || !!edgeOn(e.l);
+      e.el.classList.toggle('flow-dim', !on);
+      e.el.classList.toggle('hl', !!edgeOn && on);
+      if (on && (edgeOn || edgeEls.length <= IDLE_ANIM_EDGES)) activeEdges.push(e);
+    });
+    edgeEls.forEach(function(e){ e.out.style.display = e.ret.style.display = 'none'; });
+  }
+
+  // ---- Data movement (paused while scrolled away or on the other tab) ----
+  var running = false, dotsShown = false;
+  function animateOn(){ return animateEl ? animateEl.checked : !reduceMotion; }
+  function hideDots(){
+    if (!dotsShown) return;
+    edgeEls.forEach(function(e){ e.out.style.display = e.ret.style.display = 'none'; });
+    dotsShown = false;
+  }
+  function onScreen(){
+    var r = wrap.getBoundingClientRect();
+    return r.width > 0 && r.bottom > 0 && r.top < window.innerHeight;
+  }
+  function frame(t){
+    if (!animateOn()){ running = false; hideDots(); return; }
+    requestAnimationFrame(frame);
+    if (!onScreen()){ hideDots(); return; }
+    dotsShown = true;
+    activeEdges.forEach(function(e){
+      if (!e.len) e.len = e.el.getTotalLength();
+      if (!e.len) return;
+      // Constant on-screen speed (~70px/s) so long edges don't look frantic.
+      var period = Math.max(2200, e.len / 0.07);
+      var ph = (t / period + e.phase) % 1;
+      var po = e.el.getPointAtLength(ph * e.len);
+      var pr = e.el.getPointAtLength((1 - (ph + 0.5) % 1) * e.len);
+      e.out.setAttribute('cx', po.x); e.out.setAttribute('cy', po.y);
+      e.ret.setAttribute('cx', pr.x); e.ret.setAttribute('cy', pr.y);
+      e.out.style.display = e.ret.style.display = 'inline';
+    });
+  }
+  function kick(){ if (!running && animateOn()){ running = true; requestAnimationFrame(frame); } }
+  if (animateEl) animateEl.addEventListener('change', kick);
+
+  var hideEl = document.getElementById(P + 'hide-isolated');
+  build(hideEl ? hideEl.checked : false);
+  kick();
+  if (hideEl) hideEl.addEventListener('change', function(){ build(hideEl.checked); });
+  var search = document.getElementById(P + 'search');
+  if (search) search.addEventListener('input', function(){
+    var q2 = search.value.trim().toLowerCase();
+    highlight = null;
+    if (q2){
+      highlight = {};
+      ids.forEach(function(id){ if (byId[id].label.toLowerCase().indexOf(q2) !== -1) highlight[id] = true; });
+    }
+    paint();
+  });
+  svg.addEventListener('click', function(){
+    api.select(null);
+    if (api.onSelect) api.onSelect(null);
+  });
+
+  api.select = function(id){ selected = id && byId[id] ? id : null; paint(); };
+  api.highlight = function(list){
+    highlight = {};
+    (list || []).forEach(function(id){ highlight[id] = true; });
+    if (!Object.keys(highlight).length) highlight = null;
+    selected = null;
+    paint();
+  };
+  api.reset = function(){ wrap.scrollTo(0, 0); };
+  return api;
+}
+
+// Codebase section controller: Flow | Graph tabs over one data set, with a
+// shared toolbar (search, hide isolated, animate, reset) and shared selection.
+function wfgenCodebase(P, isMain){
+  var dataEl = document.getElementById(P + 'data');
+  if (!dataEl) return;
+  var section = dataEl.closest('.section');
+  // Both views read this checkbox each frame; default it from the OS motion setting.
+  var animateEl = document.getElementById(P + 'animate');
+  if (animateEl) animateEl.checked = window.matchMedia('(prefers-reduced-motion: no-preference)').matches;
+  var force = wfgenCodeGraph(P), flow = wfgenFlow(P);
+  var views = {flow: document.getElementById(P + 'flow-view'), force: document.getElementById(P + 'force-view')};
+  var tabs = {flow: document.getElementById(P + 'tab-flow'), force: document.getElementById(P + 'tab-force')};
+  var current = null;
+  function show(v){
+    current = v;
+    Object.keys(views).forEach(function(k){
+      if (views[k]) views[k].hidden = k !== v;
+      if (tabs[k]){ tabs[k].classList.toggle('on', k === v); tabs[k].setAttribute('aria-selected', k === v ? 'true' : 'false'); }
+    });
+    if (section) section.querySelectorAll('[data-view-text]').forEach(function(t){ t.hidden = t.getAttribute('data-view-text') !== v; });
+    if (v === 'force' && force) force.fit();
+  }
+  Object.keys(tabs).forEach(function(k){ if (tabs[k]) tabs[k].addEventListener('click', function(){ show(k); }); });
+  if (force) force.onSelect = function(id){ if (flow) flow.select(id); };
+  if (flow) flow.onSelect = function(id){ if (force) force.select(id); };
+  var resetEl = document.getElementById(P + 'reset-view');
+  if (resetEl) resetEl.addEventListener('click', function(){ if (current === 'flow' && flow) flow.reset(); });
+  show((section && section.getAttribute('data-default-view')) || 'flow');
+  if (isMain) window.__wfgenIsolateGraphNodes = function(ids, label){
+    show('flow');
+    if (force) force.isolate(ids, label);
+    if (flow) flow.highlight(ids);
+  };
+}
+wfgenCodebase('graph-', true);
+wfgenCodebase('test-graph-', false);
 """
 
 TOUR_JS = """
@@ -1945,7 +2402,7 @@ TOUR_JS = """
     {sel: '.stat-row', title: 'Capacity stats', body: "These are modeled estimates, not measurements. Expand \\u201cHow was Modeled Throughput computed?\\u201d below for the exact math, or run the generated k6 script against a real deploy to check them."},
     {sel: '#tour-derivation', title: 'Where the numbers come from', body: 'Every number above traces back to something concrete \\u2014 worker count \\u00d7 per-worker concurrency, ranked against whichever constraint is tightest. Click either panel for the full derivation or a ready-to-run load test.'},
     {sel: '#section-semantic', title: 'Architecture map', body: 'A curated view of how the system actually works \\u2014 entry points, services, datastores, and integrations, grouped by feature. Click any node for details, then \\u201cShow import details\\u201d to jump to the exact files behind it.'},
-    {sel: '#section-graph', title: 'Codebase graph', body: 'Every node is a real file; every edge is an actual import or a pattern-confirmed service call \\u2014 not a guess. Drag to pan, scroll to zoom, click a node to isolate its connections, or search by name.'},
+    {sel: '#section-graph', title: 'Codebase', body: 'Every node is a real file; every edge is an actual import or a pattern-confirmed service call \\u2014 not a guess. Flow lays them out left to right with dots showing calls going out and returns coming back; Graph is the same data, force-directed. Click a node to trace its paths.'},
     {sel: '#section-architecture', title: 'Architecture diagram', body: 'Solid boxes are confirmed in your source code; dashed boxes are declared in a manifest but never matched to real usage.'},
     {sel: '#section-flows', title: 'Data flow paths', body: 'Each card animates a real request path \\u2014 write, read, background jobs \\u2014 inferred from what was actually detected.'},
     {sel: '#section-concurrency', title: 'Concurrency model', body: "Layer-by-layer: what model each component uses, its ceiling, and what's actually limiting it."},
@@ -3498,8 +3955,8 @@ faster. Treat this number as a starting estimate, not a capacity guarantee.</div
             )
         semantic_section = f"""
 <div class="section" id="section-semantic">
-<div class="section-title">Architecture Map — {len(sg_graph['nodes'])} components · {len(sg_graph.get('edges', []))} flows</div>
-<p style="font-size:11px;color:var(--muted);margin:-4px 0 16px">A curated view of how the system works: entry points, services, datastores, and external integrations — grouped by feature, not by file layout.{' Detected: ' + stat_bits + '.' if stat_bits else ''} Click any node for details; use <b>Show import details</b> to jump to the exact files behind it in the Codebase Graph below.</p>
+<div class="section-title">Architecture Map (components) — {len(sg_graph['nodes'])} components · {len(sg_graph.get('edges', []))} flows</div>
+<p class="section-intro">A curated view of how the system works: entry points, services, datastores, and external integrations — grouped by feature, not by file layout.{' Detected: ' + stat_bits + '.' if stat_bits else ''} Click any node for details; use <b>Show import details</b> to jump to the exact files behind it in the Codebase section below.</p>
 <div class="semantic-wrap">
 <div class="semantic-scroll">
 <svg id="semantic-canvas"></svg>
@@ -3516,44 +3973,87 @@ faster. Treat this number as a starting estimate, not a capacity guarantee.</div
 </div>
 """
 
-    graph = analysis.get('graph') or {'nodes': [], 'links': [], 'meta': {'files': 0, 'links': 0, 'aggregated': False, 'shown_nodes': 0, 'has_access_log': False}}
-    graph_json = json.dumps(graph)
+    empty_graph = {'nodes': [], 'links': [], 'meta': {'files': 0, 'links': 0, 'aggregated': False, 'shown_nodes': 0, 'has_access_log': False}}
+
+    def codebase_section(g: dict, P: str, section_id: str, title: str, intro: str) -> str:
+        gm = g['meta']
+        # A layered diagram gets too tall to read past ~80 nodes; start big
+        # (or directory-aggregated) graphs on the force view instead.
+        default_view = 'force' if gm['aggregated'] or gm['shown_nodes'] > _FLOW_MAX_NODES else 'flow'
+        flow_anim_note = ('' if gm['links'] <= _FLOW_IDLE_ANIM_EDGES else
+                          f' With {gm["links"]} edges, animating everything at once would be noise, so only the hovered or clicked node\'s paths move.')
+        return f"""
+<div class="section" id="{section_id}" data-default-view="{default_view}">
+<div class="section-title">{title}</div>
+<p class="section-intro">{intro}</p>
+<p class="section-intro cg-view-text" data-view-text="flow"><b>Flow view:</b> files are laid out left → right by dependency depth, starting from the sources (the HTTP entry and files nothing imports); every detected service is its own node in the last column, and dashed edges close an import cycle. Moving dots show data going both ways: a filled dot is a call or request going out, a hollow dot the return or response coming back.{flow_anim_note} Hover a node to see its direct connections; click it to trace everything upstream and downstream.</p>
+<p class="section-intro cg-view-text" data-view-text="force" hidden><b>Graph view:</b> the same nodes and edges, force-directed, so files that import each other a lot pull together into clusters and hubs stand out. Dots show the same to-and-fro movement (filled = call, hollow = return). Drag a node to move it, scroll to zoom, click a node to isolate its connections.</p>
+<div class="cg-bar">
+<div class="cg-tabs" role="tablist"><button type="button" role="tab" id="{P}tab-flow">Flow</button><button type="button" role="tab" id="{P}tab-force">Graph</button></div>
+<input id="{P}search" class="graph-search" placeholder="filter modules…">
+<label id="{P}hide-isolated-wrap" class="graph-hide-isolated-wrap"><input type="checkbox" id="{P}hide-isolated">hide isolated files<span id="{P}isolated-count" class="graph-isolated-count"></span></label>
+<label class="graph-hide-isolated-wrap"><input type="checkbox" id="{P}animate">animate data movement</label>
+<button id="{P}reset-view" class="graph-reset-view" type="button" title="Restore the default zoom, pan and scroll">reset view</button>
+</div>
+<div id="{P}flow-view" class="cg-view">
+<div class="flow-wrap"><svg id="{P}flow-canvas"></svg></div>
+<div class="flow-legend">
+<span><i style="border-color:#22c55e"></i>entry → route file</span>
+<span><i style="border-color:var(--muted)"></i>import</span>
+<span><i style="border-color:#60a5fa"></i>service call (pattern-confirmed)</span>
+<span><i style="border-color:var(--muted);border-top-style:dashed"></i>import cycle</span>
+<span><span class="dot"></span>call / request →</span>
+<span><span class="dot ret"></span>← return / response</span>
+<span><b style="color:var(--text)">click a node</b>&nbsp;to trace everything upstream and downstream of it</span>
+</div>
+</div>
+<div id="{P}force-view" class="cg-view" hidden>
+<div class="graph-wrap">
+<canvas id="{P}canvas"></canvas>
+<div id="{P}tooltip" class="graph-tooltip"></div>
+<div class="graph-legend">
+<span><span class="lg-dot" style="background:#22c55e"></span>entry (HTTP clients)</span>
+<span><span class="lg-dot" style="border-radius:2px"></span>module (colored by package)</span>
+<span><span class="lg-square"></span>external service (pattern-confirmed)</span>
+<span>● call → &nbsp;○ ← return (static, not live traffic{" unless amber" if gm.get('has_access_log') else ""})</span>
+<span><span class="lg-ring"></span><b style="color:var(--text)">click a node</b>&nbsp;to isolate its call paths; drag to move, scroll to zoom</span>
+</div>
+</div>
+</div>
+<script type="application/json" id="{P}data">{json.dumps(g)}</script>
+</div>
+"""
+
+    def graph_note(gm: dict, unit: str) -> str:
+        return (f"{gm['files']} {unit} aggregated into {gm['shown_nodes']} directories" if gm['aggregated']
+                else f"{gm['shown_nodes']} modules")
+
+    empty_graph = {'nodes': [], 'links': [], 'meta': {'files': 0, 'links': 0, 'aggregated': False, 'shown_nodes': 0, 'has_access_log': False}}
+    graph = analysis.get('graph') or empty_graph
     gm = graph['meta']
-    graph_note = (
-        f"{gm['files']} files aggregated into {gm['shown_nodes']} directories" if gm['aggregated']
-        else f"{gm['shown_nodes']} modules"
-    )
     graph_section = ''
     if graph['nodes']:
         access_log = analysis.get('access_log')
         traffic_note = (
             f" Amber particles on entry edges are <b>real</b> traffic, weighted by request count from <code>{access_log['source']}</code> ({access_log['total']:,} requests parsed)."
             if gm.get('has_access_log') and access_log else
-            " This is <b>static analysis, not live monitoring</b> — particle motion shows dependency direction (importer → imported), not request traffic. Pass <code>--access-log &lt;path&gt;</code> to overlay real per-route request counts instead."
+            " This is <b>static analysis, not live monitoring</b>: the moving dots show direction, not measured traffic. Pass <code>--access-log &lt;path&gt;</code> to overlay real per-route request counts."
         )
-        graph_section = f"""
-<div class="section" id="section-graph">
-<div class="section-title">Codebase Graph — {graph_note} · {gm['links']} real connections</div>
-<p style="font-size:11px;color:var(--muted);margin:-4px 0 16px">Every node is a real file{' or directory' if gm['aggregated'] else ''} in this repo; every line is an actual import statement, or a pattern-confirmed service call scanned per-file (the same signal behind the summary below, localized to its source).{traffic_note} Drag a node, scroll to zoom, click to isolate its connections, or search below.</p>
-<div class="graph-wrap">
-<canvas id="code-graph"></canvas>
-<div id="graph-tooltip" class="graph-tooltip"></div>
-<div class="graph-toolbar">
-<input id="graph-search" placeholder="filter modules…">
-<label id="graph-hide-isolated-wrap"><input type="checkbox" id="graph-hide-isolated">hide isolated files<span id="graph-isolated-count"></span></label>
-<button id="graph-reset-view" type="button" title="Restore the default zoom and pan">reset view</button>
-</div>
-<div class="graph-legend">
-<span><span class="lg-dot" style="background:#22c55e"></span>entry (HTTP clients)</span>
-<span><span class="lg-dot" style="border-radius:2px"></span>module (colored by package)</span>
-<span><span class="lg-square"></span>external service (pattern-confirmed)</span>
-<span>→ arrow = "imports / calls" (static — not live traffic{" unless amber" if gm.get('has_access_log') else ""})</span>
-<span><span class="lg-ring"></span><b style="color:var(--text)">click a node</b>&nbsp;to isolate its call paths (dims everything else); click empty space to clear, type in the search box to highlight by name</span>
-</div>
-</div>
-<script type="application/json" id="graph-data">{graph_json}</script>
-</div>
-"""
+        graph_section = codebase_section(
+            graph, 'graph-', 'section-graph',
+            f"Codebase (files) — {graph_note(gm, 'files')} · {gm['links']} real connections",
+            f"Every node is a real source file{' or directory' if gm['aggregated'] else ''} in this repo (tests have their own section below); every line is an actual import statement, or a pattern-confirmed service call scanned per-file.{traffic_note}",
+        )
+
+    test_graph = analysis.get('test_graph') or empty_graph
+    tgm = test_graph['meta']
+    test_graph_section = ''
+    if test_graph['nodes']:
+        test_graph_section = codebase_section(
+            test_graph, 'test-graph-', 'section-test-graph',
+            f"Tests (files) — {tgm['files']} test files · {graph_note(tgm, 'test files')} · {tgm['links']} connections",
+            "Test files and the source modules and services they import or call, kept out of the Codebase section above so fixtures and test doubles don't drown out the real dependency structure.",
+        )
 
     ext_count = len(analysis['external_sources'])
     storage_count = len(analysis['storage'])
@@ -3579,16 +4079,19 @@ faster. Treat this number as a starting estimate, not a capacity guarantee.</div
 <p class="subtitle">Component communication map · concurrent request capacity · bottleneck analysis · {today}</p>
 
 <div class="stat-row">{stats}</div>
-<p style="font-size:11px;color:var(--muted);margin:-28px 0 20px">Capacity figures are static-analysis estimates (heuristic: ~100 concurrent tasks per async worker), not load-test results.</p>
+<p class="section-intro" style="margin:-28px 0 20px">Capacity figures are static-analysis estimates (heuristic: ~100 concurrent tasks per async worker), not load-test results.</p>
 <div id="tour-derivation">{derivation_html}</div>
 {semantic_section}
 {graph_section}
+{test_graph_section}
 <div class="section" id="section-architecture">
 <div class="section-title">Full System Architecture — {component_count} Components</div>
-<p style="font-size:11px;color:var(--muted);margin:-4px 0 16px">Detection is pattern-based static analysis. Dashed boxes are dependencies declared in your manifest but not matched to a usage pattern in source — may be wired through a custom abstraction. Solid boxes are pattern-confirmed in source. A component not shown here isn't confirmed absent from the project — only undetected.</p>
+<p class="section-intro">Detection is pattern-based static analysis. Dashed boxes are dependencies declared in your manifest but not matched to a usage pattern in source — may be wired through a custom abstraction. Solid boxes are pattern-confirmed in source. A component not shown here isn't confirmed absent from the project — only undetected.</p>
+<details id="arch-details" class="arch-details"><summary>Show the layered component diagram (overlaps the Architecture Map above)</summary>
 <div class="arch-wrap">{arch_html}<svg id="edge-overlay"></svg><script type="application/json" id="edges-data">{edges_json}</script></div>
-{f'<p style="font-size:11px;color:var(--muted);margin-top:10px">{len(edges)} edge{"s" if len(edges) != 1 else ""} shown — drawn only where a data-flow step names two rendered components consecutively; not a claim about every real connection.</p>' if edges else ''}
+{f'<p class="section-intro" style="margin:10px 0 0">{len(edges)} edge{"s" if len(edges) != 1 else ""} shown — drawn only where a data-flow step names two rendered components consecutively; not a claim about every real connection.</p>' if edges else ''}
 {route_html}
+</details>
 </div>
 
 <div class="section" id="section-flows">
@@ -3609,7 +4112,8 @@ faster. Treat this number as a starting estimate, not a capacity guarantee.</div
 <footer>{project_name} · System Workflow · {component_count} components · {today} · workflow-generator</footer>
 </div>
 <script>{EDGE_JS}</script>
-<script>{GRAPH_JS}</script>
+<script>{GRAPH_JS}
+{FLOW_JS}</script>
 <script>{SEMANTIC_GRAPH_JS}</script>
 <script>{TOUR_JS}</script>
 </body>
@@ -3650,6 +4154,10 @@ _EXTSRC_RE_KEYS = {
     'Stripe': 'stripe', 'Salesforce': 'salesforce', 'Twilio': 'twilio',
 }
 _GRAPH_ENTRY_ID = 'entry:http'
+_TEST_DIRS = frozenset({'tests', 'test', '__tests__', 'spec', 'specs', 'e2e'})
+_TEST_FILE_RE = re.compile(
+    r'^test_.*\.py$|_test\.(?:py|go|rb)$|^conftest\.py$|\.(?:test|spec)\.[jt]sx?$|_spec\.rb$|Tests?\.java$'
+)
 
 
 def _py_module_name(root: Path, p: Path) -> str:
@@ -3728,12 +4236,13 @@ def _resolve_js_spec(spec: str, from_file: Path, js_paths: set, alias_map: list[
     return None
 
 
-def build_code_graph(root: Path, analysis: dict, detail: str = 'auto') -> dict:
+def build_code_graphs(root: Path, analysis: dict, detail: str = 'auto') -> tuple[dict, dict]:
     """Full module-dependency graph: every source file is a node, every real
     import is an edge, every file matching a detected component's own _RE
     pattern gets an edge to that component. Best-effort only — anything that
     can't be confidently resolved (dynamic imports, unusual layouts, Go
-    without a parseable go.mod) is silently skipped rather than guessed."""
+    without a parseable go.mod) is silently skipped rather than guessed.
+    Returns (main, tests): the same scan split into source and test graphs."""
     files = _collect_graph_files(root)
     total_files = len(files)
     file_ids = {p: p.relative_to(root).as_posix() for p in files}
@@ -3951,7 +4460,7 @@ def build_code_graph(root: Path, analysis: dict, detail: str = 'auto') -> dict:
 
     # --- Service edges: same _RE pattern that already backs the summary,
     # scanned per-file so the graph shows *which* files actually call it. ---
-    def add_service_group(items, name_key, re_map, icon_fn):
+    def add_service_group(items, name_key, re_map, icon_fn, cat):
         for item in items:
             name = item[name_key] if isinstance(item, dict) else item
             re_key = re_map.get(name)
@@ -3968,14 +4477,14 @@ def build_code_graph(root: Path, analysis: dict, detail: str = 'auto') -> dict:
                 nodes[sid] = {
                     'id': sid, 'label': name, 'pkg': '(service)', 'loc': 0,
                     'kind': 'service', 'color': C.get(color_key, C['gray']),
-                    'icon': icon_fn(item),
+                    'icon': icon_fn(item), 'cat': cat,
                 }
 
-    add_service_group(analysis['llm'].get('providers', []), None, _LLM_RE_KEYS, lambda i: '🧠')
-    add_service_group(analysis['storage'], 'name', _STORAGE_RE_KEYS, lambda i: _STORE_ICONS.get(i['type'], '📦'))
-    add_service_group(analysis['queues'], 'name', _QUEUE_RE_KEYS, lambda i: '📨')
+    add_service_group(analysis['llm'].get('providers', []), None, _LLM_RE_KEYS, lambda i: '🧠', 'LLM')
+    add_service_group(analysis['storage'], 'name', _STORAGE_RE_KEYS, lambda i: _STORE_ICONS.get(i['type'], '📦'), 'store')
+    add_service_group(analysis['queues'], 'name', _QUEUE_RE_KEYS, lambda i: '📨', 'queue')
     add_service_group([s for s in analysis['external_sources'] if s['name'] in _EXTSRC_RE_KEYS],
-                       'name', _EXTSRC_RE_KEYS, lambda i: '🌐')
+                       'name', _EXTSRC_RE_KEYS, lambda i: '🌐', 'external')
 
     # --- Entry node: HTTP clients -> every file with a route decorator.
     # When an --access-log was supplied, weight each edge with the real
@@ -4003,6 +4512,41 @@ def build_code_graph(root: Path, analysis: dict, detail: str = 'auto') -> dict:
             'loc': 0, 'kind': 'entry', 'color': C['green'], 'icon': '🌐',
         }
 
+    test_ids = {fid for fid in file_ids.values() if _is_test_path(fid)}
+    main_nodes, main_edges = _split_test_graph(nodes, edges, test_ids, 'main')
+    test_nodes, test_edges = _split_test_graph(nodes, edges, test_ids, 'tests')
+    main = _finalize_graph(main_nodes, main_edges, total_files - len(test_ids), detail, access_log)
+    tests = _finalize_graph(test_nodes, test_edges, len(test_ids), detail, access_log)
+    return main, tests
+
+
+def build_code_graph(root: Path, analysis: dict, detail: str = 'auto') -> dict:
+    """Source-only module graph (test files are split out — see build_code_graphs)."""
+    return build_code_graphs(root, analysis, detail)[0]
+
+
+def _is_test_path(rel: str) -> bool:
+    parts = Path(rel).parts
+    return any(d in _TEST_DIRS for d in parts[:-1]) or bool(_TEST_FILE_RE.search(parts[-1]))
+
+
+def _split_test_graph(nodes: dict, edges: list, test_ids: set, scope: str) -> tuple[dict, list]:
+    """Tests otherwise swamp the main graph: fixtures and detector tests name
+    every service they exercise, so each one draws a fan of service edges.
+    'main' drops test files (and any service/entry node only a test reached);
+    'tests' keeps test files plus whatever they import or call."""
+    if scope == 'tests':
+        edges = [e for e in edges if e['s'] in test_ids]
+        keep = test_ids | {e['t'] for e in edges}
+    else:
+        edges = [e for e in edges if e['s'] not in test_ids and e['t'] not in test_ids]
+        linked = {e['s'] for e in edges} | {e['t'] for e in edges}
+        keep = {nid for nid, n in nodes.items()
+                if nid not in test_ids and (n['kind'] == 'file' or nid in linked)}
+    return {nid: n for nid, n in nodes.items() if nid in keep}, edges
+
+
+def _finalize_graph(nodes: dict, edges: list, total_files: int, detail: str, access_log) -> dict:
     file_node_count = sum(1 for n in nodes.values() if n['kind'] == 'file')
     should_aggregate = (detail == 'dirs') or (detail == 'auto' and file_node_count > _GRAPH_FILE_CAP)
     aggregated = False
@@ -4103,7 +4647,7 @@ def collect(root: Path, graph_detail: str = 'auto', access_log_path: str | None 
         'workers': workers,
     })
     access_log = parse_access_log(access_log_path, api_server.get('routes', [])) if access_log_path else None
-    graph = build_code_graph(root, {
+    graph, test_graph = build_code_graphs(root, {
         'llm': llm, 'storage': storage, 'queues': queues, 'external_sources': external_sources,
         'framework': api_server.get('framework'), 'access_log': access_log,
     }, detail=graph_detail)
@@ -4140,6 +4684,7 @@ def collect(root: Path, graph_detail: str = 'auto', access_log_path: str | None 
         'capacity': capacity,
         'flows': flows,
         'graph': graph,
+        'test_graph': test_graph,
         'semantic_graph': semantic_graph,
         'access_log': access_log,
     }

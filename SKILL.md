@@ -152,6 +152,13 @@ The generated `WORKFLOW.html` always contains all of the following:
    import-direction only (static, honest) unless `--access-log` was supplied, in which case
    HTTP-entry edges are weighted with real observed request counts — the graph is explicit about
    which kind of edge is which so it's never mistaken for a traced request path.
+   Test files are split into a separate **Test Graph** section (tests plus the modules/services
+   they import or call), so they don't clutter the main graph.
+   Each has a **Flow | Graph** toggle over the same nodes/edges: Flow is a layered left-to-right
+   diagram (depth columns, every service its own node in the last column, cycles dashed), Graph
+   the force-directed view. Dots animate data both ways (filled = call, hollow = return); past 60
+   edges only the clicked/hovered node's paths animate. The Full System Architecture section is
+   collapsed by default.
 
 8. **Guided tour** — a spotlight walkthrough that dims the page and steps through each section
    in turn (Back/Next/Skip), shown automatically the first time a generated report is opened.
