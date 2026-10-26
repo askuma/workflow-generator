@@ -13,6 +13,19 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      # This runs in parallel with the PyPI publish on the same release event, and
+      # the registry rejects a server.json whose PyPI version doesn't exist yet.
+      - name: Wait for the package version on PyPI
+        run: |
+          pkg=$(jq -r '.packages[0].identifier' server.json)
+          ver=$(jq -r '.packages[0].version' server.json)
+          for i in $(seq 1 40); do
+            if curl -sf "https://pypi.org/pypi/$pkg/$ver/json" >/dev/null; then
+              echo "$pkg $ver is on PyPI"; exit 0
+            fi
+            echo "waiting for $pkg $ver on PyPI ($i/40)"; sleep 15
+          done
+          echo "::error::$pkg $ver did not appear on PyPI within 10 minutes"; exit 1
       - name: Install mcp-publisher
         run: |
           curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
